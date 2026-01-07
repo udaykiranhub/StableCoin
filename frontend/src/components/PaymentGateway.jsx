@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Form, Alert, Spinner, Modal } from 'react-bootstrap';
 import { createPaymentOrder, verifyPayment } from '../services/apiService';
-import { getContract, getCurrentAccount } from '../services/web3Service';
+import { getContract, getCurrentAccount, convertToTokenUnits, parseContractError } from '../services/web3Service';
 
-const PaymentGateway = ({ userAddress, onSuccess }) => {
+const PaymentGateway = ({ userAddress, onPaymentSuccess }) => {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState(null);
 
@@ -21,9 +20,6 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onerror = () => {
-      setError('Failed to load payment gateway. Please refresh the page.');
-    };
     document.body.appendChild(script);
   };
 
@@ -40,7 +36,6 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
 
     setLoading(true);
     setError('');
-    setSuccess('');
 
     try {
       // Create payment order
@@ -50,12 +45,12 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
         throw new Error(orderData.error || 'Failed to create order');
       }
 
-      // Initialize Razorpay
+      // Initialize Razorpay - FIXED: Use your Razorpay key directly
       const options = {
-        key: 'rzp_test_OxJmN5zjxxmLtj',
+        key: 'rzp_test_OxJmN5zjxxmLtj', // Your test key directly
         amount: orderData.order.amount,
-        currency: orderData.order.currency,
-        name: 'INRT Token Purchase',
+        currency: 'INR',
+        name: 'INRT Token System',
         description: `Purchase ${amount} INRT tokens`,
         order_id: orderData.order.id,
         handler: async (response) => {
@@ -63,12 +58,9 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
         },
         prefill: {
           name: 'INRT User',
-          email: 'user@inrt.com',
-          contact: '9999999999'
+          email: 'user@inrt.com'
         },
-        theme: {
-          color: '#3399cc'
-        },
+        theme: { color: '#3399cc' },
         modal: {
           ondismiss: () => {
             setLoading(false);
@@ -76,10 +68,11 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
         }
       };
 
-      const rzp1 = new window.Razorpay(options);
-      rzp1.open();
+      const rzp = new window.Razorpay(options);
+      rzp.open();
 
     } catch (err) {
+      console.error('Payment error:', err);
       setError(err.message || 'Payment initiation failed');
       setLoading(false);
     }
@@ -87,7 +80,7 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
 
   const handlePaymentSuccess = async (response, orderId) => {
     try {
-      // Verify payment with backend
+      // Verify payment
       const verification = await verifyPayment({
         razorpay_payment_id: response.razorpay_payment_id,
         razorpay_order_id: orderId,
@@ -96,95 +89,82 @@ const PaymentGateway = ({ userAddress, onSuccess }) => {
       });
 
       if (verification.success) {
-        setPaymentInfo(verification.mintingData);
-        setSuccess(`✅ Payment successful! Payment ID: ${response.razorpay_payment_id}`);
+        setPaymentInfo({
+          paymentId: verification.payment.razorpayPaymentId,
+          amount: verification.payment.amountINR,
+          userAddress: verification.payment.userAddress
+        });
         setShowModal(true);
-        if (onSuccess) onSuccess();
+        
+        if (onPaymentSuccess) {
+          onPaymentSuccess();
+        }
       } else {
         setError('Payment verification failed');
       }
     } catch (err) {
-      setError('Error verifying payment: ' + err.message);
+      setError('Error verifying payment');
     } finally {
       setLoading(false);
     }
   };
 
-  // Find the handleMintTokens function and replace it with:
-
-const handleMintTokens = async () => {
-  if (!paymentInfo) return;
-  
-  setLoading(true);
-  try {
-    const contract = getContract();
-    const account = await getCurrentAccount();
-    const web3 = getWeb3();
+  const handleMintTokens = async () => {
+    if (!paymentInfo) return;
     
-    // Get decimals from contract
-    const decimals = await contract.methods.decimals().call();
-    
-    // Convert amount to the correct units (considering decimals)
-    const amountInBaseUnits = Math.floor(paymentInfo.amount * Math.pow(10, decimals));
-    
-    // Call mintTokens function on contract
-    const tx = await contract.methods.mintTokens(
-      account,
-      amountInBaseUnits.toString(), // Convert to string to avoid BigInt issues
-      paymentInfo.paymentId
-    ).send({ from: account });
-    
-    setSuccess(`✅ Tokens minted successfully!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-    setShowModal(false);
-    
-    if (onSuccess) onSuccess();
-    
-  } catch (err) {
-    console.error('Minting error:', err);
-    setError('Failed to mint tokens: ' + err.message);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const formatAddress = (addr) => {
-    if (!addr) return '';
-    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+    setLoading(true);
+    try {
+      const contract = getContract();
+      const account = getCurrentAccount();
+      
+      // Convert amount to token units
+      const amountInUnits = await convertToTokenUnits(paymentInfo.amount);
+      
+      // Call mintTokens function - only whitelisted addresses can call this
+      const tx = await contract.methods.mintTokens(
+        paymentInfo.userAddress,
+        amountInUnits,
+        paymentInfo.paymentId
+      ).send({ from: account });
+      
+      console.log('Mint successful:', tx.transactionHash);
+      
+      // Close modal
+      setShowModal(false);
+      setAmount('');
+      
+      alert(`✅ Tokens minted successfully!\nTransaction: ${tx.transactionHash}`);
+      
+    } catch (error) {
+      console.error('Mint error:', error);
+      setError(parseContractError(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
-      <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-        <Card.Header className="bg-white border-0">
+      <Card className="h-100">
+        <Card.Header>
           <h5 className="mb-0">💰 Purchase INRT Tokens</h5>
         </Card.Header>
         <Card.Body>
-          <Alert variant="info" className="border-0" style={{ backgroundColor: '#e7f3ff' }}>
-            <div className="d-flex align-items-center">
-              <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>💡</span>
-              <div>
-                <strong>1 INRT = 1 Indian Rupee</strong>
-                <small className="d-block text-muted">Purchase tokens with secure Razorpay gateway</small>
-              </div>
-            </div>
+          <Alert variant="info" className="small">
+            <strong>1 INRT = 1 Indian Rupee</strong><br/>
+            After payment, tokens must be minted by a whitelisted minter.
           </Alert>
           
           {error && (
-            <Alert variant="danger" className="border-0">
-              <small>{error}</small>
-            </Alert>
-          )}
-          
-          {success && !showModal && (
-            <Alert variant="success" className="border-0">
-              <small>{success}</small>
+            <Alert variant="danger" className="small">
+              {error}
             </Alert>
           )}
           
           <Form.Group className="mb-4">
-            <Form.Label className="fw-bold">Amount in INR</Form.Label>
-            <div className="input-group input-group-lg">
-              <span className="input-group-text bg-light border-end-0">₹</span>
+            <Form.Label>Amount in INR</Form.Label>
+            <div className="input-group">
+              <span className="input-group-text">₹</span>
               <Form.Control
                 type="number"
                 value={amount}
@@ -193,8 +173,8 @@ const handleMintTokens = async () => {
                 step="1"
                 placeholder="Enter amount"
                 disabled={loading}
-                className="border-start-0"
               />
+              <span className="input-group-text">INRT</span>
             </div>
             <Form.Text className="text-muted">
               Minimum purchase: ₹1 (1 INRT)
@@ -205,92 +185,54 @@ const handleMintTokens = async () => {
             variant="primary"
             onClick={handlePayment}
             disabled={loading || !userAddress}
-            className="w-100 py-3"
-            style={{ borderRadius: '10px' }}
+            className="w-100"
           >
             {loading ? (
               <>
-                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                <Spinner as="span" size="sm" className="me-2" />
                 Processing...
               </>
             ) : (
-              <>
-                <span style={{ fontSize: '1.2rem', marginRight: '10px' }}>💳</span>
-                Buy INRT Tokens
-              </>
+              'Buy INRT Tokens'
             )}
           </Button>
           
           {!userAddress && (
-            <Alert variant="warning" className="mt-3 border-0 text-center">
-              <small>Please connect your wallet to make a purchase</small>
+            <Alert variant="warning" className="mt-3 small text-center">
+              Connect your wallet to make a purchase
             </Alert>
           )}
         </Card.Body>
       </Card>
 
       {/* Mint Confirmation Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
-        <Modal.Header closeButton className="border-0">
-          <Modal.Title>🎉 Payment Verified!</Modal.Title>
+      <Modal show={showModal} onHide={() => setShowModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Payment Verified</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div className="text-center mb-4">
-            <div style={{
-              width: '80px',
-              height: '80px',
-              backgroundColor: '#28a745',
-              borderRadius: '50%',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '2rem',
-              marginBottom: '1rem'
-            }}>
-              ✓
-            </div>
-            <h5>Ready to Mint Tokens</h5>
-          </div>
-          
           {paymentInfo && (
-            <div className="mb-4">
-              <div className="d-flex justify-content-between mb-2">
-                <span className="text-muted">Amount:</span>
-                <span className="fw-bold">₹{paymentInfo.amount}</span>
+            <>
+              <Alert variant="success">
+                ✅ Payment verified successfully!
+              </Alert>
+              
+              <div className="mb-3">
+                <p><strong>User Address:</strong> {paymentInfo.userAddress}</p>
+                <p><strong>Amount Paid:</strong> ₹{paymentInfo.amount}</p>
+                <p><strong>Tokens to Mint:</strong> {paymentInfo.amount} INRT</p>
+                <p><strong>Payment ID:</strong> {paymentInfo.paymentId}</p>
               </div>
-              <div className="d-flex justify-content-between mb-2">
-                <span className="text-muted">Tokens:</span>
-                <span className="fw-bold">{paymentInfo.amount} INRT</span>
-              </div>
-              <div className="d-flex justify-content-between mb-2">
-                <span className="text-muted">Recipient:</span>
-                <span className="fw-bold">{formatAddress(userAddress)}</span>
-              </div>
-              <div className="d-flex justify-content-between">
-                <span className="text-muted">Payment ID:</span>
-                <small className="fw-bold">{paymentInfo.paymentId.substring(0, 15)}...</small>
-              </div>
-            </div>
+              
+              <Alert variant="info" className="small">
+                Payment verified. A whitelisted minter can now mint tokens for this payment.
+              </Alert>
+            </>
           )}
-          
-          <Alert variant="warning" className="border-0" style={{ backgroundColor: '#fff3cd' }}>
-            <small>
-              <strong>Note:</strong> You need to be whitelisted as a minter to mint tokens.
-              This will require a blockchain transaction (gas fee applies).
-            </small>
-          </Alert>
         </Modal.Body>
-        <Modal.Footer className="border-0">
+        <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Cancel
-          </Button>
-          <Button 
-            variant="primary" 
-            onClick={handleMintTokens}
-            disabled={loading}
-          >
-            {loading ? 'Minting...' : 'Mint Tokens'}
+            Close
           </Button>
         </Modal.Footer>
       </Modal>

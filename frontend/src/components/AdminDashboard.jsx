@@ -1,593 +1,1246 @@
+// import React, { useState, useEffect } from 'react';
+// import { Row, Col, Card, Button, Form, Table, Alert, Badge, Spinner } from 'react-bootstrap';
+// import { getContract, getCurrentAccount } from '../services/web3Service';
+// import { getAllPayments } from '../services/apiService';
+
+// const AdminDashboard = ({ userAddress, onRefresh }) => {
+//   const [loading, setLoading] = useState(true);
+//   const [actionLoading, setActionLoading] = useState(false);
+//   const [allPayments, setAllPayments] = useState([]);
+//   const [contractData, setContractData] = useState(null);
+//   const [whitelistForm, setWhitelistForm] = useState({ address: '', canMint: true, canBurn: false });
+//   const [adminForm, setAdminForm] = useState({ address: '', isAdmin: true });
+//   const [logs, setLogs] = useState([]);
+
+//   useEffect(() => {
+//     fetchAdminData();
+//     fetchContractData();
+//   }, []);
+
+//   const addLog = (message, type = 'info') => {
+//     const timestamp = new Date().toLocaleTimeString();
+//     setLogs(prev => [...prev, { timestamp, message, type }]);
+//     console.log(`[ADMIN] ${message}`);
+//   };
+
+//   const fetchAdminData = async () => {
+//     try {
+//       const paymentsData = await getAllPayments();
+//       setAllPayments(paymentsData.payments || []);
+//       addLog(`Loaded ${paymentsData.payments?.length || 0} payments`, 'info');
+//     } catch (error) {
+//       addLog(`Error loading payments: ${error.message}`, 'error');
+//     }
+//   };
+
+//  // In AdminDashboard.jsx, update fetchContractData:
+// const fetchContractData = async () => {
+//   try {
+//     const contract = getContract();
+    
+//     const [name, symbol, decimals, totalSupply, totalReserve] = await Promise.all([
+//       contract.methods.name().call(),
+//       contract.methods.symbol().call(),
+//       contract.methods.decimals().call(),
+//       contract.methods.totalSupply().call(),
+//       contract.methods.totalReserve().call()
+//     ]);
+    
+//     // Convert BigInt to numbers
+//     const decimalsNum = parseInt(decimals.toString());
+//     const supplyNum = parseInt(totalSupply.toString());
+//     const reserveNum = parseInt(totalReserve.toString());
+    
+//     // Calculate with proper decimal places
+//     const divisor = 10 ** decimalsNum;
+//     const supplyFormatted = (supplyNum / divisor).toFixed(2);
+//     const reserveFormatted = (reserveNum / divisor).toFixed(2);
+    
+//     setContractData({
+//       name, 
+//       symbol, 
+//       decimals: decimalsNum,
+//       totalSupply: supplyFormatted,
+//       totalReserve: reserveFormatted,
+//       isPegged: supplyNum === reserveNum
+//     });
+    
+//     addLog(`Contract data loaded: ${supplyFormatted} INRT supply`, 'info');
+    
+//   } catch (error) {
+//     console.error('Error loading contract data:', error);
+//     addLog(`Error loading contract data: ${error.message}`, 'error');
+//   }
+// };
+
+//   const handleUpdateWhitelist = async () => {
+//     if (!whitelistForm.address) {
+//       alert('Please enter address');
+//       return;
+//     }
+    
+//     setActionLoading(true);
+//     addLog(`Updating whitelist for ${whitelistForm.address}...`, 'info');
+    
+//     try {
+//       const contract = getContract();
+//       const account = getCurrentAccount();
+      
+//       addLog(`Calling updateWhitelist(${whitelistForm.address}, ${whitelistForm.canMint}, ${whitelistForm.canBurn})`, 'info');
+      
+//       const tx = await contract.methods.updateWhitelist(
+//         whitelistForm.address,
+//         whitelistForm.canMint,
+//         whitelistForm.canBurn
+//       ).send({ from: account });
+      
+//       addLog(`✅ Whitelist updated! Tx: ${tx.transactionHash}`, 'success');
+      
+//       setWhitelistForm({ address: '', canMint: true, canBurn: false });
+//       alert('Whitelist updated successfully!');
+      
+//       if (onRefresh) onRefresh();
+      
+//     } catch (error) {
+//       addLog(`❌ Whitelist update failed: ${error.message}`, 'error');
+//       alert(`Failed: ${error.message}`);
+//     } finally {
+//       setActionLoading(false);
+//     }
+//   };
+
+//   const handleUpdateAdmin = async () => {
+//     if (!adminForm.address) {
+//       alert('Please enter address');
+//       return;
+//     }
+    
+//     setActionLoading(true);
+//     addLog(`${adminForm.isAdmin ? 'Adding' : 'Removing'} admin ${adminForm.address}...`, 'info');
+    
+//     try {
+//       const contract = getContract();
+//       const account = getCurrentAccount();
+      
+//       addLog(`Calling updateAdmin(${adminForm.address}, ${adminForm.isAdmin})`, 'info');
+      
+//       const tx = await contract.methods.updateAdmin(
+//         adminForm.address,
+//         adminForm.isAdmin
+//       ).send({ from: account });
+      
+//       addLog(`✅ Admin ${adminForm.isAdmin ? 'added' : 'removed'}! Tx: ${tx.transactionHash}`, 'success');
+      
+//       setAdminForm({ address: '', isAdmin: true });
+//       alert('Admin updated successfully!');
+      
+//     } catch (error) {
+//       addLog(`❌ Admin update failed: ${error.message}`, 'error');
+//       alert(`Failed: ${error.message}`);
+//     } finally {
+//       setActionLoading(false);
+//     }
+//   };
+
+//   const formatAddress = (addr) => {
+//     return `${addr?.substring(0, 8)}...${addr?.substring(addr.length - 6)}`;
+//   };
+
+//   if (loading) {
+//     return (
+//       <div className="text-center py-5">
+//         <Spinner animation="border" />
+//         <p className="mt-3">Loading admin dashboard...</p>
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="admin-dashboard">
+//       {/* Contract Stats */}
+//       {contractData && (
+//         <Row className="mb-4">
+//           <Col md={3}>
+//             <Card className="text-center shadow-sm">
+//               <Card.Body>
+//                 <Card.Title className="small text-muted">Total Supply</Card.Title>
+//                 <h4>{contractData.totalSupply} INRT</h4>
+//               </Card.Body>
+//             </Card>
+//           </Col>
+//           <Col md={3}>
+//             <Card className="text-center shadow-sm">
+//               <Card.Body>
+//                 <Card.Title className="small text-muted">Total Reserve</Card.Title>
+//                 <h4>{contractData.totalReserve} INR</h4>
+//                 <Badge bg={contractData.isPegged ? "success" : "danger"}>
+//                   {contractData.isPegged ? "1:1 Pegged" : "Not Pegged"}
+//                 </Badge>
+//               </Card.Body>
+//             </Card>
+//           </Col>
+//           <Col md={3}>
+//             <Card className="text-center shadow-sm">
+//               <Card.Body>
+//                 <Card.Title className="small text-muted">Tax Threshold</Card.Title>
+//                 <h4>{contractData.taxThreshold} INRT</h4>
+//                 <div className="small">1% tax above this</div>
+//               </Card.Body>
+//             </Card>
+//           </Col>
+//           <Col md={3}>
+//             <Card className="text-center shadow-sm">
+//               <Card.Body>
+//                 <Card.Title className="small text-muted">Payments</Card.Title>
+//                 <h4>{allPayments.length}</h4>
+//                 <div className="small">Total transactions</div>
+//               </Card.Body>
+//             </Card>
+//           </Col>
+//         </Row>
+//       )}
+
+//       {/* Admin Actions */}
+//       <Row className="mb-4">
+//         <Col lg={6} className="mb-4">
+//           <Card className="shadow-sm">
+//             <Card.Header>
+//               <h5 className="mb-0">👥 Manage Whitelist</h5>
+//             </Card.Header>
+//             <Card.Body>
+//               <Form.Group className="mb-3">
+//                 <Form.Label>Address</Form.Label>
+//                 <Form.Control
+//                   type="text"
+//                   placeholder="0x..."
+//                   value={whitelistForm.address}
+//                   onChange={(e) => setWhitelistForm({...whitelistForm, address: e.target.value})}
+//                 />
+//               </Form.Group>
+              
+//               <Row className="mb-3">
+//                 <Col>
+//                   <Form.Check
+//                     label="Can Mint"
+//                     checked={whitelistForm.canMint}
+//                     onChange={(e) => setWhitelistForm({...whitelistForm, canMint: e.target.checked})}
+//                   />
+//                 </Col>
+//                 <Col>
+//                   <Form.Check
+//                     label="Can Burn"
+//                     checked={whitelistForm.canBurn}
+//                     onChange={(e) => setWhitelistForm({...whitelistForm, canBurn: e.target.checked})}
+//                   />
+//                 </Col>
+//               </Row>
+              
+//               <Button
+//                 variant="primary"
+//                 onClick={handleUpdateWhitelist}
+//                 disabled={actionLoading || !whitelistForm.address}
+//                 className="w-100"
+//               >
+//                 {actionLoading ? 'Updating...' : 'Update Whitelist'}
+//               </Button>
+//             </Card.Body>
+//           </Card>
+//         </Col>
+        
+//         <Col lg={6}>
+//           <Card className="shadow-sm">
+//             <Card.Header>
+//               <h5 className="mb-0">🔧 Manage Admins</h5>
+//             </Card.Header>
+//             <Card.Body>
+//               <Form.Group className="mb-3">
+//                 <Form.Label>Address</Form.Label>
+//                 <Form.Control
+//                   type="text"
+//                   placeholder="0x..."
+//                   value={adminForm.address}
+//                   onChange={(e) => setAdminForm({...adminForm, address: e.target.value})}
+//                 />
+//               </Form.Group>
+              
+//               <div className="mb-3">
+//                 <Form.Check
+//                   inline
+//                   type="radio"
+//                   label="Add Admin"
+//                   checked={adminForm.isAdmin}
+//                   onChange={() => setAdminForm({...adminForm, isAdmin: true})}
+//                 />
+//                 <Form.Check
+//                   inline
+//                   type="radio"
+//                   label="Remove Admin"
+//                   checked={!adminForm.isAdmin}
+//                   onChange={() => setAdminForm({...adminForm, isAdmin: false})}
+//                 />
+//               </div>
+              
+//               <Button
+//                 variant={adminForm.isAdmin ? "success" : "danger"}
+//                 onClick={handleUpdateAdmin}
+//                 disabled={actionLoading || !adminForm.address}
+//                 className="w-100"
+//               >
+//                 {actionLoading ? 'Processing...' : (adminForm.isAdmin ? 'Add Admin' : 'Remove Admin')}
+//               </Button>
+//             </Card.Body>
+//           </Card>
+//         </Col>
+//       </Row>
+
+//       {/* All Payments */}
+//       <Row className="mb-4">
+//         <Col>
+//           <Card className="shadow-sm">
+//             <Card.Header>
+//               <h5 className="mb-0">📊 All Payments</h5>
+//             </Card.Header>
+//             <Card.Body>
+//               {allPayments.length === 0 ? (
+//                 <Alert variant="info">No payments found</Alert>
+//               ) : (
+//                 <div className="table-responsive">
+//                   <Table hover>
+//                     <thead>
+//                       <tr>
+//                         <th>User</th>
+//                         <th>Amount</th>
+//                         <th>Status</th>
+//                         <th>Payment ID</th>
+//                         <th>Transaction</th>
+//                       </tr>
+//                     </thead>
+//                     <tbody>
+//                       {allPayments.slice(0, 10).map(payment => (
+//                         <tr key={payment._id}>
+//                           <td>
+//                             <code>{formatAddress(payment.userAddress)}</code>
+//                           </td>
+//                           <td className="fw-bold">₹{payment.amountINR}</td>
+//                           <td>
+//                             <Badge bg={
+//                               payment.transactionHash ? 'success' :
+//                               payment.status === 'completed' ? 'warning' :
+//                               payment.status === 'pending' ? 'secondary' : 'danger'
+//                             }>
+//                               {payment.transactionHash ? 'Minted' : payment.status}
+//                             </Badge>
+//                           </td>
+//                           <td>
+//                             <code className="small">
+//                               {payment.razorpayPaymentId?.substring(0, 10)}...
+//                             </code>
+//                           </td>
+//                           <td>
+//                             {payment.transactionHash ? (
+//                               <a
+//                                 href={`https://mumbai.polygonscan.com/tx/${payment.transactionHash}`}
+//                                 target="_blank"
+//                                 rel="noopener noreferrer"
+//                               >
+//                                 View
+//                               </a>
+//                             ) : (
+//                               <span className="text-muted">-</span>
+//                             )}
+//                           </td>
+//                         </tr>
+//                       ))}
+//                     </tbody>
+//                   </Table>
+//                 </div>
+//               )}
+//             </Card.Body>
+//           </Card>
+//         </Col>
+//       </Row>
+
+//       {/* Admin Logs */}
+//       <Card className="shadow-sm">
+//         <Card.Header>
+//           <h5 className="mb-0">📝 Admin Action Logs</h5>
+//         </Card.Header>
+//         <Card.Body style={{ maxHeight: '150px', overflowY: 'auto' }}>
+//           {logs.length === 0 ? (
+//             <p className="text-muted">No admin actions yet</p>
+//           ) : (
+//             logs.map((log, index) => (
+//               <div key={index} className={`small mb-1 ${log.type === 'error' ? 'text-danger' : 'text-success'}`}>
+//                 [{log.timestamp}] {log.message}
+//               </div>
+//             ))
+//           )}
+//         </Card.Body>
+//       </Card>
+//     </div>
+//   );
+// };
+
+// export default AdminDashboard;
+
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Form, Table, Alert, Badge, Modal, Spinner } from 'react-bootstrap';
+import { Row, Col, Card, Button, Form, Table, Alert, Badge, Spinner } from 'react-bootstrap';
 import { getContract, getCurrentAccount } from '../services/web3Service';
 import { getAllPayments } from '../services/apiService';
 
-const AdminDashboard = ({ userAddress }) => {
-  const [contractData, setContractData] = useState(null);
-  const [allPayments, setAllPayments] = useState([]);
+const AdminDashboard = ({ userAddress, onRefresh }) => {
   const [loading, setLoading] = useState(true);
-  const [whitelistAddress, setWhitelistAddress] = useState('');
-  const [whitelistData, setWhitelistData] = useState({ canMint: true, canBurn: false });
-  const [adminAddress, setAdminAddress] = useState('');
-  const [isAddingAdmin, setIsAddingAdmin] = useState(true);
-  const [taxConfig, setTaxConfig] = useState({
-    rate: '',
-    wallet: '',
-    enabled: true,
-    threshold: ''
-  });
-  const [transferLimits, setTransferLimits] = useState({ min: '', max: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [allPayments, setAllPayments] = useState([]);
+  const [contractData, setContractData] = useState(null);
+  const [whitelistForm, setWhitelistForm] = useState({ address: '', canMint: true, canBurn: false });
+  const [adminForm, setAdminForm] = useState({ address: '', isAdmin: true });
+  const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    fetchAdminData();
-  }, [userAddress]);
+    fetchAllData();
+  }, []);
 
-  // Update fetchAdminData function for proper number conversion:
-const fetchAdminData = async () => {
-  setLoading(true);
-  try {
-    const contract = getContract();
-    const web3 = getWeb3();
-    
-    // Fetch contract data
-    const [
-      totalSupply,
-      totalReserve,
-      taxConfigData,
-      maxTransfer,
-      minTransfer,
-      decimals
-    ] = await Promise.all([
-      contract.methods.totalSupply().call(),
-      contract.methods.totalReserve().call(),
-      contract.methods.taxConfig().call(),
-      contract.methods.maxTransferAmount().call(),
-      contract.methods.minTransferAmount().call(),
-      contract.methods.decimals().call()
-    ]);
-    
-    // Fetch all payments
-    const paymentsData = await getAllPayments();
-    
-    // Convert from base units to token units
-    const divisor = Math.pow(10, decimals);
-    const supplyInTokens = Number(totalSupply) / divisor;
-    const reserveInTokens = Number(totalReserve) / divisor;
-    
-    setContractData({
-      totalSupply: supplyInTokens.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
-      totalReserve: reserveInTokens.toLocaleString('en-IN', { maximumFractionDigits: 2 }),
-      pegStatus: Math.abs(supplyInTokens - reserveInTokens) < 0.01 // Check if approximately equal
-    });
-    
-    // Tax config is already in correct units (basis points for rate, tokens for threshold)
-    setTaxConfig({
-      rate: taxConfigData.taxRate.toString(),
-      wallet: taxConfigData.taxWallet,
-      enabled: taxConfigData.taxEnabled,
-      threshold: (Number(taxConfigData.taxThreshold) / divisor).toString()
-    });
-    
-    // Transfer limits are in token units
-    setTransferLimits({
-      min: (Number(minTransfer) / divisor).toString(),
-      max: (Number(maxTransfer) / divisor).toString()
-    });
-    
-    setAllPayments(paymentsData.payments || []);
-    
-  } catch (error) {
-    console.error('Error fetching admin data:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  const addLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, { timestamp, message, type }]);
+    console.log(`[ADMIN] ${message}`);
+  };
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      // Fetch both data in parallel
+      await Promise.all([fetchAdminData(), fetchContractData()]);
+    } catch (error) {
+      console.error('Error loading admin dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAdminData = async () => {
+    try {
+      const paymentsData = await getAllPayments();
+      setAllPayments(paymentsData.payments || []);
+      addLog(`Loaded ${paymentsData.payments?.length || 0} payments`, 'info');
+    } catch (error) {
+      addLog(`Error loading payments: ${error.message}`, 'error');
+      throw error;
+    }
+  };
+
+  const fetchContractData = async () => {
+    try {
+      const contract = getContract();
+      
+      // Try to get contract data - handle case where contract might not be initialized
+      if (!contract) {
+        addLog('Contract not initialized', 'error');
+        return;
+      }
+      
+      const [name, symbol, decimals, totalSupply, totalReserve] = await Promise.all([
+        contract.methods.name().call(),
+        contract.methods.symbol().call(),
+        contract.methods.decimals().call(),
+        contract.methods.totalSupply().call(),
+        contract.methods.totalReserve().call()
+      ]);
+      
+      // Convert BigInt to numbers
+      const decimalsNum = parseInt(decimals.toString());
+      const supplyNum = parseInt(totalSupply.toString());
+      const reserveNum = parseInt(totalReserve.toString());
+      
+      // Calculate with proper decimal places
+      const divisor = 10 ** decimalsNum;
+      const supplyFormatted = (supplyNum / divisor).toFixed(2);
+      const reserveFormatted = (reserveNum / divisor).toFixed(2);
+      
+      setContractData({
+        name, 
+        symbol, 
+        decimals: decimalsNum,
+        totalSupply: supplyFormatted,
+        totalReserve: reserveFormatted,
+        isPegged: supplyNum === reserveNum
+      });
+      
+      addLog(`Contract data loaded: ${supplyFormatted} INRT supply`, 'info');
+      
+    } catch (error) {
+      console.error('Error loading contract data:', error);
+      addLog(`Error loading contract data: ${error.message}`, 'error');
+      // Don't rethrow here, just set basic contract data
+      setContractData({
+        name: 'INRT Token',
+        symbol: 'INRT',
+        decimals: 2,
+        totalSupply: '0.00',
+        totalReserve: '0.00',
+        isPegged: false
+      });
+    }
+  };
+
   const handleUpdateWhitelist = async () => {
-    if (!whitelistAddress || !/^0x[a-fA-F0-9]{40}$/.test(whitelistAddress)) {
-      alert('Please enter a valid Ethereum address');
+    if (!whitelistForm.address) {
+      alert('Please enter address');
       return;
     }
     
     setActionLoading(true);
+    addLog(`Updating whitelist for ${whitelistForm.address}...`, 'info');
+    
     try {
       const contract = getContract();
-      const account = await getCurrentAccount();
+      const account = getCurrentAccount();
+      
+      if (!contract || !account) {
+        throw new Error('Contract or account not initialized');
+      }
+      
+      addLog(`Calling updateWhitelist(${whitelistForm.address}, ${whitelistForm.canMint}, ${whitelistForm.canBurn})`, 'info');
       
       const tx = await contract.methods.updateWhitelist(
-        whitelistAddress,
-        whitelistData.canMint,
-        whitelistData.canBurn
+        whitelistForm.address,
+        whitelistForm.canMint,
+        whitelistForm.canBurn
       ).send({ from: account });
       
-      alert(`✅ Whitelist updated!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-      setWhitelistAddress('');
-      fetchAdminData();
+      addLog(`✅ Whitelist updated! Tx: ${tx.transactionHash}`, 'success');
+      
+      setWhitelistForm({ address: '', canMint: true, canBurn: false });
+      alert('Whitelist updated successfully!');
+      
+      if (onRefresh) onRefresh();
       
     } catch (error) {
-      alert(`❌ Failed to update whitelist: ${error.message}`);
+      addLog(`❌ Whitelist update failed: ${error.message}`, 'error');
+      alert(`Failed: ${error.message}`);
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUpdateAdmin = async () => {
-    if (!adminAddress || !/^0x[a-fA-F0-9]{40}$/.test(adminAddress)) {
-      alert('Please enter a valid Ethereum address');
+    if (!adminForm.address) {
+      alert('Please enter address');
       return;
     }
     
     setActionLoading(true);
+    addLog(`${adminForm.isAdmin ? 'Adding' : 'Removing'} admin ${adminForm.address}...`, 'info');
+    
     try {
       const contract = getContract();
-      const account = await getCurrentAccount();
+      const account = getCurrentAccount();
+      
+      if (!contract || !account) {
+        throw new Error('Contract or account not initialized');
+      }
+      
+      addLog(`Calling updateAdmin(${adminForm.address}, ${adminForm.isAdmin})`, 'info');
       
       const tx = await contract.methods.updateAdmin(
-        adminAddress,
-        isAddingAdmin
+        adminForm.address,
+        adminForm.isAdmin
       ).send({ from: account });
       
-      alert(`✅ Admin ${isAddingAdmin ? 'added' : 'removed'}!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-      setAdminAddress('');
+      addLog(`✅ Admin ${adminForm.isAdmin ? 'added' : 'removed'}! Tx: ${tx.transactionHash}`, 'success');
+      
+      setAdminForm({ address: '', isAdmin: true });
+      alert('Admin updated successfully!');
       
     } catch (error) {
-      alert(`❌ Failed to update admin: ${error.message}`);
+      addLog(`❌ Admin update failed: ${error.message}`, 'error');
+      alert(`Failed: ${error.message}`);
     } finally {
       setActionLoading(false);
     }
   };
 
- // Update handleUpdateTaxConfig function:
-const handleUpdateTaxConfig = async () => {
-  if (!taxConfig.rate || !taxConfig.wallet || !taxConfig.threshold) {
-    alert('Please fill all tax configuration fields');
-    return;
-  }
-  
-  setActionLoading(true);
-  try {
-    const contract = getContract();
-    const account = await getCurrentAccount();
-    const web3 = getWeb3();
-    
-    // Convert to proper types
-    const rate = parseInt(taxConfig.rate);
-    const threshold = parseInt(taxConfig.threshold);
-    
-    const tx = await contract.methods.updateTaxConfig(
-      rate.toString(), // Convert to string
-      taxConfig.wallet,
-      taxConfig.enabled,
-      threshold.toString() // Convert to string
-    ).send({ from: account });
-    
-    alert(`✅ Tax config updated!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-    fetchAdminData();
-    
-  } catch (error) {
-    alert(`❌ Failed to update tax config: ${error.message}`);
-  } finally {
-    setActionLoading(false);
-  }
-};
-
-// Update handleUpdateTransferLimits function:
-const handleUpdateTransferLimits = async () => {
-  if (!transferLimits.min || !transferLimits.max) {
-    alert('Please enter both limits');
-    return;
-  }
-  
-  if (parseInt(transferLimits.min) >= parseInt(transferLimits.max)) {
-    alert('Minimum must be less than maximum');
-    return;
-  }
-  
-  setActionLoading(true);
-  try {
-    const contract = getContract();
-    const account = await getCurrentAccount();
-    const web3 = getWeb3();
-    
-    const tx = await contract.methods.updateTransferLimits(
-      transferLimits.min.toString(), // Convert to string
-      transferLimits.max.toString()  // Convert to string
-    ).send({ from: account });
-    
-    alert(`✅ Transfer limits updated!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-    fetchAdminData();
-    
-  } catch (error) {
-    alert(`❌ Failed to update transfer limits: ${error.message}`);
-  } finally {
-    setActionLoading(false);
-  }
-};
-
-
-  const handlePauseContract = async (pause) => {
-    setActionLoading(true);
-    try {
-      const contract = getContract();
-      const account = await getCurrentAccount();
-      
-      const tx = pause 
-        ? await contract.methods.emergencyPause().send({ from: account })
-        : await contract.methods.emergencyUnpause().send({ from: account });
-      
-      alert(`✅ Contract ${pause ? 'paused' : 'unpaused'}!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-      fetchAdminData();
-      
-    } catch (error) {
-      alert(`❌ Failed to ${pause ? 'pause' : 'unpause'}: ${error.message}`);
-    } finally {
-      setActionLoading(false);
-    }
+  const formatAddress = (addr) => {
+    if (!addr) return 'N/A';
+    return `${addr.substring(0, 8)}...${addr.substring(addr.length - 6)}`;
   };
 
   if (loading) {
     return (
-      <Container className="text-center py-5">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3">Loading admin dashboard...</p>
-      </Container>
+      <div className="text-center py-5" style={{ minHeight: '400px' }}>
+        <Spinner animation="border" variant="primary" style={{ 
+          width: '50px', 
+          height: '50px',
+          borderWidth: '3px'
+        }} />
+        <p className="mt-3 text-muted">Loading admin dashboard...</p>
+        <small className="text-muted">Fetching contract data and payment history...</small>
+      </div>
     );
   }
 
   return (
-    <Container fluid>
-      <h2 className="mb-4">🔐 Admin Dashboard</h2>
-      
-      {/* Contract Overview */}
-      <Row className="mb-4">
-        <Col md={4}>
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Body className="text-center">
-              <Card.Title className="text-muted">Total Supply</Card.Title>
-              <Card.Text className="display-6 fw-bold text-primary">
-                ₹{contractData?.totalSupply}
-              </Card.Text>
-              <small className="text-muted">INRT Tokens in Circulation</small>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col md={4}>
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Body className="text-center">
-              <Card.Title className="text-muted">Total Reserve</Card.Title>
-              <Card.Text className="display-6 fw-bold text-success">
-                ₹{contractData?.totalReserve}
-              </Card.Text>
-              <small className="text-muted">INR in Reserve</small>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col md={4}>
-          <Card className={`shadow-sm border-0 ${contractData?.pegStatus ? 'border-success' : 'border-danger'}`} 
-                style={{ borderRadius: '15px' }}>
-            <Card.Body className="text-center">
-              <Card.Title className="text-muted">Peg Status</Card.Title>
-              <Card.Text className="display-6 fw-bold">
-                {contractData?.pegStatus ? (
-                  <span className="text-success">1:1 ✓</span>
-                ) : (
-                  <span className="text-danger">⚠️</span>
-                )}
-              </Card.Text>
-              <small className="text-muted">
-                {contractData?.pegStatus ? 'Peg Maintained' : 'Peg Broken'}
-              </small>
-            </Card.Body>
-          </Card>
-        </Col>
+    <div className="admin-dashboard">
+      {/* Admin Header */}
+      <div className="mb-4">
+        <h1 className="fw-bold">Admin Dashboard</h1>
+        <p className="text-muted">Manage whitelists, admins, and monitor all transactions</p>
+      </div>
+
+      {/* Contract Stats */}
+      <Row className="mb-5">
+        {contractData ? (
+          <>
+            <Col md={3} className="mb-4">
+              <Card className="text-center border-0 shadow-lg" style={{
+                borderRadius: '20px',
+                background: 'linear-gradient(145deg, #ffffff, #f0f0f0)',
+                borderTop: '4px solid #0d6efd'
+              }}>
+                <Card.Body className="p-4">
+                  <div className="mb-3">
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      background: 'rgba(13, 110, 253, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto'
+                    }}>
+                      <span style={{ fontSize: '1.8rem', color: '#0d6efd' }}>💰</span>
+                    </div>
+                  </div>
+                  <Card.Title className="text-muted mb-2" style={{ fontSize: '0.9rem', letterSpacing: '1px' }}>
+                    TOTAL SUPPLY
+                  </Card.Title>
+                  <h2 style={{ 
+                    fontWeight: '800',
+                    fontSize: '2rem',
+                    color: '#0d6efd'
+                  }}>
+                    {contractData.totalSupply} INRT
+                  </h2>
+                  <small className="text-muted">Circulating tokens</small>
+                </Card.Body>
+              </Card>
+            </Col>
+            
+            <Col md={3} className="mb-4">
+              <Card className="text-center border-0 shadow-lg" style={{
+                borderRadius: '20px',
+                background: 'linear-gradient(145deg, #ffffff, #f0f0f0)',
+                borderTop: '4px solid #28a745'
+              }}>
+                <Card.Body className="p-4">
+                  <div className="mb-3">
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      background: 'rgba(40, 167, 69, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto'
+                    }}>
+                      <span style={{ fontSize: '1.8rem', color: '#28a745' }}>🏦</span>
+                    </div>
+                  </div>
+                  <Card.Title className="text-muted mb-2" style={{ fontSize: '0.9rem', letterSpacing: '1px' }}>
+                    TOTAL RESERVE
+                  </Card.Title>
+                  <h2 style={{ 
+                    fontWeight: '800',
+                    fontSize: '2rem',
+                    color: '#28a745'
+                  }}>
+                    {contractData.totalReserve} INR
+                  </h2>
+                  <Badge bg={contractData.isPegged ? "success" : "danger"} className="mt-2 px-3 py-2" style={{
+                    fontWeight: '600',
+                    boxShadow: contractData.isPegged ? '0 0 10px rgba(40, 167, 69, 0.3)' : '0 0 10px rgba(220, 53, 69, 0.3)'
+                  }}>
+                    {contractData.isPegged ? "✅ 1:1 Pegged" : "⚠️ Not Pegged"}
+                  </Badge>
+                </Card.Body>
+              </Card>
+            </Col>
+            
+            <Col md={3} className="mb-4">
+              <Card className="text-center border-0 shadow-lg" style={{
+                borderRadius: '20px',
+                background: 'linear-gradient(145deg, #ffffff, #f0f0f0)',
+                borderTop: '4px solid #ffc107'
+              }}>
+                <Card.Body className="p-4">
+                  <div className="mb-3">
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      background: 'rgba(255, 193, 7, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto'
+                    }}>
+                      <span style={{ fontSize: '1.8rem', color: '#ffc107' }}>📊</span>
+                    </div>
+                  </div>
+                  <Card.Title className="text-muted mb-2" style={{ fontSize: '0.9rem', letterSpacing: '1px' }}>
+                    DECIMALS
+                  </Card.Title>
+                  <h2 style={{ 
+                    fontWeight: '800',
+                    fontSize: '2.5rem',
+                    color: '#ffc107'
+                  }}>
+                    {contractData.decimals}
+                  </h2>
+                  <small className="text-muted">Token precision</small>
+                </Card.Body>
+              </Card>
+            </Col>
+            
+            <Col md={3} className="mb-4">
+              <Card className="text-center border-0 shadow-lg" style={{
+                borderRadius: '20px',
+                background: 'linear-gradient(145deg, #ffffff, #f0f0f0)',
+                borderTop: '4px solid #6f42c1'
+              }}>
+                <Card.Body className="p-4">
+                  <div className="mb-3">
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      background: 'rgba(111, 66, 193, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto'
+                    }}>
+                      <span style={{ fontSize: '1.8rem', color: '#6f42c1' }}>📈</span>
+                    </div>
+                  </div>
+                  <Card.Title className="text-muted mb-2" style={{ fontSize: '0.9rem', letterSpacing: '1px' }}>
+                    TOTAL PAYMENTS
+                  </Card.Title>
+                  <h2 style={{ 
+                    fontWeight: '800',
+                    fontSize: '2.5rem',
+                    color: '#6f42c1'
+                  }}>
+                    {allPayments.length}
+                  </h2>
+                  <small className="text-muted">All transactions</small>
+                </Card.Body>
+              </Card>
+            </Col>
+          </>
+        ) : (
+          <Col className="text-center py-5">
+            <Alert variant="warning" className="border-0 shadow" style={{ borderRadius: '15px' }}>
+              <h5>Contract Data Unavailable</h5>
+              <p className="mb-0">Unable to fetch contract data. Please check your connection.</p>
+            </Alert>
+          </Col>
+        )}
       </Row>
-      
+
       {/* Admin Actions */}
-      <Row className="mb-4">
+      <Row className="mb-5">
         <Col lg={6} className="mb-4">
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Header className="bg-white border-0">
-              <h5 className="mb-0">👥 Manage Whitelist</h5>
+          <Card className="border-0 shadow-lg" style={{
+            borderRadius: '20px',
+            background: 'linear-gradient(145deg, #ffffff, #f0f0f0)'
+          }}>
+            <Card.Header className="bg-white border-0 pt-4" style={{ borderRadius: '20px 20px 0 0' }}>
+              <h5 className="mb-0 fw-bold d-flex align-items-center">
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #0d6efd, #0a58ca)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '10px',
+                  boxShadow: '0 0 15px rgba(13, 110, 253, 0.3)'
+                }}>
+                  <span style={{ color: 'white', fontSize: '1.2rem' }}>👥</span>
+                </div>
+                Manage Whitelist
+              </h5>
             </Card.Header>
-            <Card.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Address</Form.Label>
+            <Card.Body className="p-4">
+              <Form.Group className="mb-4">
+                <Form.Label className="fw-semibold mb-2 d-flex align-items-center">
+                  <span style={{ marginRight: '8px' }}>👤</span>
+                  Ethereum Address
+                </Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="0x..."
-                  value={whitelistAddress}
-                  onChange={(e) => setWhitelistAddress(e.target.value)}
-                  style={{ fontFamily: 'monospace' }}
+                  value={whitelistForm.address}
+                  onChange={(e) => setWhitelistForm({...whitelistForm, address: e.target.value})}
+                  style={{
+                    borderRadius: '10px',
+                    padding: '12px 15px',
+                    border: '1px solid #dee2e6'
+                  }}
                 />
               </Form.Group>
               
-              <Row className="mb-3">
+              <Row className="mb-4">
                 <Col>
-                  <Form.Check
-                    type="checkbox"
-                    label="Can Mint"
-                    checked={whitelistData.canMint}
-                    onChange={(e) => setWhitelistData({...whitelistData, canMint: e.target.checked})}
-                  />
+                  <div className="d-flex align-items-center mb-2">
+                    <Form.Check
+                      type="checkbox"
+                      label="Can Mint"
+                      checked={whitelistForm.canMint}
+                      onChange={(e) => setWhitelistForm({...whitelistForm, canMint: e.target.checked})}
+                      className="me-2"
+                    />
+                    <Badge bg={whitelistForm.canMint ? "success" : "secondary"} className="px-3 py-1">
+                      {whitelistForm.canMint ? "✅ Enabled" : "❌ Disabled"}
+                    </Badge>
+                  </div>
                 </Col>
                 <Col>
-                  <Form.Check
-                    type="checkbox"
-                    label="Can Burn"
-                    checked={whitelistData.canBurn}
-                    onChange={(e) => setWhitelistData({...whitelistData, canBurn: e.target.checked})}
-                  />
+                  <div className="d-flex align-items-center mb-2">
+                    <Form.Check
+                      type="checkbox"
+                      label="Can Burn"
+                      checked={whitelistForm.canBurn}
+                      onChange={(e) => setWhitelistForm({...whitelistForm, canBurn: e.target.checked})}
+                      className="me-2"
+                    />
+                    <Badge bg={whitelistForm.canBurn ? "warning" : "secondary"} className="px-3 py-1">
+                      {whitelistForm.canBurn ? "✅ Enabled" : "❌ Disabled"}
+                    </Badge>
+                  </div>
                 </Col>
               </Row>
               
               <Button
                 variant="primary"
                 onClick={handleUpdateWhitelist}
-                className="w-100"
-                disabled={actionLoading || !whitelistAddress}
+                disabled={actionLoading || !whitelistForm.address}
+                className="w-100 py-3 fw-bold border-0"
+                style={{
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0d6efd, #0a58ca)',
+                  boxShadow: actionLoading ? '0 4px 15px rgba(13, 110, 253, 0.2)' : '0 4px 20px rgba(13, 110, 253, 0.4)',
+                  animation: actionLoading ? 'none' : 'buttonPulse 2s infinite',
+                  fontSize: '1.1rem'
+                }}
               >
-                {actionLoading ? 'Updating...' : 'Update Whitelist'}
+                {actionLoading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" className="me-2" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <span style={{ marginRight: '8px' }}>✨</span>
+                    UPDATE WHITELIST
+                  </>
+                )}
               </Button>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={6} className="mb-4">
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Header className="bg-white border-0">
-              <h5 className="mb-0">🔧 Manage Admins</h5>
-            </Card.Header>
-            <Card.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Address</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="0x..."
-                  value={adminAddress}
-                  onChange={(e) => setAdminAddress(e.target.value)}
-                  style={{ fontFamily: 'monospace' }}
-                />
-              </Form.Group>
               
-              <div className="mb-3">
-                <Form.Check
-                  inline
-                  type="radio"
-                  label="Add Admin"
-                  name="adminAction"
-                  checked={isAddingAdmin}
-                  onChange={() => setIsAddingAdmin(true)}
-                />
-                <Form.Check
-                  inline
-                  type="radio"
-                  label="Remove Admin"
-                  name="adminAction"
-                  checked={!isAddingAdmin}
-                  onChange={() => setIsAddingAdmin(false)}
-                />
-              </div>
-              
-              <Button
-                variant={isAddingAdmin ? "success" : "danger"}
-                onClick={handleUpdateAdmin}
-                className="w-100"
-                disabled={actionLoading || !adminAddress}
-              >
-                {actionLoading ? 'Processing...' : (isAddingAdmin ? 'Add Admin' : 'Remove Admin')}
-              </Button>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-      
-      <Row className="mb-4">
-        <Col lg={6} className="mb-4">
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Header className="bg-white border-0">
-              <h5 className="mb-0">⚙️ Tax Configuration</h5>
-            </Card.Header>
-            <Card.Body>
-              <Form>
-                <Form.Group className="mb-3">
-                  <Form.Label>Tax Rate (basis points, 100 = 1%)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    value={taxConfig.rate}
-                    onChange={(e) => setTaxConfig({...taxConfig, rate: e.target.value})}
-                    min="0"
-                    max="500"
-                  />
-                </Form.Group>
-                
-                <Form.Group className="mb-3">
-                  <Form.Label>Tax Wallet Address</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={taxConfig.wallet}
-                    onChange={(e) => setTaxConfig({...taxConfig, wallet: e.target.value})}
-                    style={{ fontFamily: 'monospace' }}
-                  />
-                </Form.Group>
-                
-                <Form.Group className="mb-3">
-                  <Form.Label>Tax Threshold (INRT)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    value={taxConfig.threshold}
-                    onChange={(e) => setTaxConfig({...taxConfig, threshold: e.target.value})}
-                    min="0"
-                  />
-                </Form.Group>
-                
-                <Form.Check
-                  type="switch"
-                  label="Tax Enabled"
-                  checked={taxConfig.enabled}
-                  onChange={(e) => setTaxConfig({...taxConfig, enabled: e.target.checked})}
-                  className="mb-3"
-                />
-                
-                <Button
-                  variant="primary"
-                  onClick={handleUpdateTaxConfig}
-                  className="w-100"
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? 'Updating...' : 'Update Tax Config'}
-                </Button>
-              </Form>
+              {whitelistForm.address && (
+                <div className="mt-3 text-center">
+                  <small className="text-muted">
+                    Will update permissions for: <code>{formatAddress(whitelistForm.address)}</code>
+                  </small>
+                </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
         
         <Col lg={6}>
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Header className="bg-white border-0">
-              <h5 className="mb-0">📊 Transfer Limits</h5>
-            </Card.Header>
-            <Card.Body>
-              <Form>
-                <Row className="mb-3">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Minimum (INRT)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={transferLimits.min}
-                        onChange={(e) => setTransferLimits({...transferLimits, min: e.target.value})}
-                        min="1"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Maximum (INRT)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={transferLimits.max}
-                        onChange={(e) => setTransferLimits({...transferLimits, max: e.target.value})}
-                        min="100"
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
-                
-                <Button
-                  variant="primary"
-                  onClick={handleUpdateTransferLimits}
-                  className="w-100 mb-3"
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? 'Updating...' : 'Update Transfer Limits'}
-                </Button>
-              </Form>
-              
-              <hr />
-              
-              <h6 className="mb-3">⚠️ Emergency Controls</h6>
-              <Row>
-                <Col>
-                  <Button
-                    variant="danger"
-                    className="w-100 mb-2"
-                    onClick={() => handlePauseContract(true)}
-                    disabled={actionLoading}
-                  >
-                    ⛔ Pause All Transfers
-                  </Button>
-                </Col>
-                <Col>
-                  <Button
-                    variant="success"
-                    className="w-100 mb-2"
-                    onClick={() => handlePauseContract(false)}
-                    disabled={actionLoading}
-                  >
-                    ✅ Resume All Transfers
-                  </Button>
-                </Col>
-              </Row>
-              <small className="text-muted d-block mt-2">
-                Use these only in emergency situations
-              </small>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-      
-      {/* All Payments */}
-      <Row>
-        <Col>
-          <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-            <Card.Header className="bg-white border-0 d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">📋 All Payments</h5>
-              <Badge bg="light" text="dark">
-                {allPayments.length} total
-              </Badge>
-            </Card.Header>
-            <Card.Body>
-              {allPayments.length === 0 ? (
-                <Alert variant="info" className="text-center border-0">
-                  No payments found
-                </Alert>
-              ) : (
-                <div className="table-responsive">
-                  <Table hover className="mb-0">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>User</th>
-                        <th>Amount (₹)</th>
-                        <th>Tokens</th>
-                        <th>Status</th>
-                        <th>Transaction</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allPayments.slice(0, 10).map((payment) => (
-                        <tr key={payment._id}>
-                          <td>
-                            <small>{new Date(payment.createdAt).toLocaleDateString()}</small>
-                          </td>
-                          <td>
-                            <code>{payment.userAddress?.substring(0, 10)}...</code>
-                          </td>
-                          <td className="fw-bold">₹{payment.amountINR}</td>
-                          <td>{payment.tokensMinted || 0}</td>
-                          <td>
-                            <Badge bg={
-                              payment.status === 'verified' ? 'success' :
-                              payment.status === 'completed' ? 'primary' :
-                              payment.status === 'pending' ? 'warning' : 'danger'
-                            }>
-                              {payment.status}
-                            </Badge>
-                          </td>
-                          <td>
-                            <small className="text-muted">
-                              {payment.transactionHash?.substring(0, 15) || 'Pending'}
-                            </small>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+          <Card className="border-0 shadow-lg" style={{
+            borderRadius: '20px',
+            background: 'linear-gradient(145deg, #ffffff, #f0f0f0)'
+          }}>
+            <Card.Header className="bg-white border-0 pt-4" style={{ borderRadius: '20px 20px 0 0' }}>
+              <h5 className="mb-0 fw-bold d-flex align-items-center">
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #17a2b8, #138496)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '10px',
+                  boxShadow: '0 0 15px rgba(23, 162, 184, 0.3)'
+                }}>
+                  <span style={{ color: 'white', fontSize: '1.2rem' }}>🔧</span>
                 </div>
-              )}
-              <div className="text-center mt-3">
-                <small className="text-muted">
-                  Showing {Math.min(10, allPayments.length)} of {allPayments.length} payments
-                </small>
+                Manage Admins
+              </h5>
+            </Card.Header>
+            <Card.Body className="p-4">
+              <Form.Group className="mb-4">
+                <Form.Label className="fw-semibold mb-2 d-flex align-items-center">
+                  <span style={{ marginRight: '8px' }}>👑</span>
+                  Ethereum Address
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="0x..."
+                  value={adminForm.address}
+                  onChange={(e) => setAdminForm({...adminForm, address: e.target.value})}
+                  style={{
+                    borderRadius: '10px',
+                    padding: '12px 15px',
+                    border: '1px solid #dee2e6'
+                  }}
+                />
+              </Form.Group>
+              
+              <div className="mb-4">
+                <div className="d-flex justify-content-center gap-4 mb-3">
+                  <div className="text-center">
+                    <Form.Check
+                      type="radio"
+                      label="Add Admin"
+                      name="adminAction"
+                      checked={adminForm.isAdmin}
+                      onChange={() => setAdminForm({...adminForm, isAdmin: true})}
+                      className="mb-2"
+                    />
+                    <Badge bg="success" className="px-3 py-2">
+                      Grant Admin Rights
+                    </Badge>
+                  </div>
+                  <div className="text-center">
+                    <Form.Check
+                      type="radio"
+                      label="Remove Admin"
+                      name="adminAction"
+                      checked={!adminForm.isAdmin}
+                      onChange={() => setAdminForm({...adminForm, isAdmin: false})}
+                      className="mb-2"
+                    />
+                    <Badge bg="danger" className="px-3 py-2">
+                      Revoke Admin Rights
+                    </Badge>
+                  </div>
+                </div>
               </div>
+              
+              <Button
+                variant={adminForm.isAdmin ? "success" : "danger"}
+                onClick={handleUpdateAdmin}
+                disabled={actionLoading || !adminForm.address}
+                className="w-100 py-3 fw-bold border-0"
+                style={{
+                  borderRadius: '12px',
+                  background: adminForm.isAdmin 
+                    ? 'linear-gradient(135deg, #28a745, #218838)' 
+                    : 'linear-gradient(135deg, #dc3545, #c82333)',
+                  boxShadow: actionLoading 
+                    ? adminForm.isAdmin 
+                      ? '0 4px 15px rgba(40, 167, 69, 0.2)' 
+                      : '0 4px 15px rgba(220, 53, 69, 0.2)'
+                    : adminForm.isAdmin 
+                      ? '0 4px 20px rgba(40, 167, 69, 0.4)' 
+                      : '0 4px 20px rgba(220, 53, 69, 0.4)',
+                  animation: actionLoading ? 'none' : 'buttonPulse 2s infinite',
+                  fontSize: '1.1rem'
+                }}
+              >
+                {actionLoading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" className="me-2" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <span style={{ marginRight: '8px' }}>
+                      {adminForm.isAdmin ? '➕' : '➖'}
+                    </span>
+                    {adminForm.isAdmin ? 'ADD ADMIN' : 'REMOVE ADMIN'}
+                  </>
+                )}
+              </Button>
             </Card.Body>
           </Card>
         </Col>
       </Row>
-    </Container>
+
+      {/* All Payments */}
+      <Card className="border-0 shadow-lg mb-5" style={{
+        borderRadius: '20px',
+        background: 'linear-gradient(145deg, #ffffff, #f0f0f0)'
+      }}>
+        <Card.Header className="bg-white border-0 pt-4" style={{ borderRadius: '20px 20px 0 0' }}>
+          <div className="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 className="mb-1 fw-bold d-flex align-items-center">
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #6f42c1, #563d7c)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: '10px',
+                  boxShadow: '0 0 15px rgba(111, 66, 193, 0.3)'
+                }}>
+                  <span style={{ color: 'white', fontSize: '1.2rem' }}>📊</span>
+                </div>
+                All Payments
+              </h5>
+              <small className="text-muted">Monitor all INRT token purchases across the system</small>
+            </div>
+            <Badge bg="primary" className="px-3 py-2" style={{
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              borderRadius: '10px',
+              boxShadow: '0 0 10px rgba(13, 110, 253, 0.3)'
+            }}>
+              {allPayments.length} Total
+            </Badge>
+          </div>
+        </Card.Header>
+        <Card.Body className="p-4">
+          {allPayments.length === 0 ? (
+            <div className="text-center py-5">
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                background: 'rgba(13, 110, 253, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                border: '2px dashed rgba(13, 110, 253, 0.3)'
+              }}>
+                <span style={{ fontSize: '2.5rem', opacity: 0.5 }}>📄</span>
+              </div>
+              <h5 className="text-muted">No Payment History</h5>
+              <p className="text-muted">No payments have been made yet</p>
+            </div>
+          ) : (
+            <div className="table-responsive" style={{
+              borderRadius: '15px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 15px rgba(0, 0, 0, 0.05)'
+            }}>
+              <Table hover className="mb-0">
+                <thead style={{ 
+                  background: 'linear-gradient(135deg, #6f42c1, #563d7c)',
+                  color: 'white'
+                }}>
+                  <tr>
+                    <th className="py-3" style={{ paddingLeft: '25px', fontWeight: '600' }}>User</th>
+                    <th className="py-3" style={{ fontWeight: '600' }}>Amount</th>
+                    <th className="py-3" style={{ fontWeight: '600' }}>Status</th>
+                    <th className="py-3" style={{ fontWeight: '600' }}>Payment ID</th>
+                    <th className="py-3" style={{ paddingRight: '25px', fontWeight: '600' }}>Transaction</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPayments.slice(0, 10).map(payment => (
+                    <tr key={payment._id} style={{ 
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(111, 66, 193, 0.03)';
+                      e.currentTarget.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}>
+                      <td className="py-3" style={{ paddingLeft: '25px' }}>
+                        <code className="bg-light p-2 rounded" style={{ 
+                          fontFamily: 'monospace',
+                          fontSize: '0.85rem',
+                          color: '#495057'
+                        }}>
+                          {formatAddress(payment.userAddress)}
+                        </code>
+                      </td>
+                      <td className="py-3">
+                        <div className="fw-bold" style={{ fontSize: '1.2rem', color: '#6f42c1' }}>
+                          ₹{payment.amountINR}
+                        </div>
+                        <small className="text-muted">{payment.amountINR} INRT</small>
+                      </td>
+                      <td className="py-3">
+                        <Badge className="px-3 py-2 rounded-pill" bg={
+                          payment.transactionHash ? 'success' :
+                          payment.status === 'completed' ? 'warning' :
+                          payment.status === 'pending' ? 'secondary' : 'danger'
+                        } style={{
+                          fontWeight: '600',
+                          fontSize: '0.85rem',
+                          boxShadow: payment.transactionHash ? '0 0 10px rgba(40, 167, 69, 0.4)' : 
+                                     payment.status === 'completed' ? '0 0 10px rgba(255, 193, 7, 0.4)' : 'none'
+                        }}>
+                          {payment.transactionHash ? 'Minted' : payment.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3">
+                        <code className="bg-light p-2 rounded" style={{ 
+                          fontFamily: 'monospace',
+                          fontSize: '0.85rem',
+                          color: '#495057',
+                          border: '1px solid #dee2e6'
+                        }}>
+                          {payment.razorpayPaymentId?.substring(0, 12)}...
+                        </code>
+                      </td>
+                      <td className="py-3" style={{ paddingRight: '25px' }}>
+                        {payment.transactionHash ? (
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            href={`https://mumbai.polygonscan.com/tx/${payment.transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 rounded-pill"
+                            style={{
+                              fontWeight: '500',
+                              borderWidth: '2px',
+                              boxShadow: '0 2px 8px rgba(13, 110, 253, 0.2)'
+                            }}
+                          >
+                            <span style={{ marginRight: '5px' }}>🔗</span>
+                            View
+                          </Button>
+                        ) : (
+                          <span className="text-muted small">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </Card.Body>
+        {allPayments.length > 0 && (
+          <Card.Footer className="bg-white border-0 py-3" style={{ 
+            borderRadius: '0 0 20px 20px',
+            borderTop: '1px solid #f1f1f1'
+          }}>
+            <div className="text-center text-muted small">
+              Showing {Math.min(allPayments.length, 10)} of {allPayments.length} payments
+            </div>
+          </Card.Footer>
+        )}
+      </Card>
+
+      {/* Admin Logs */}
+      <Card className="border-0 shadow-lg" style={{
+        borderRadius: '20px',
+        background: 'linear-gradient(145deg, #ffffff, #f0f0f0)'
+      }}>
+        <Card.Header className="bg-white border-0 pt-4" style={{ borderRadius: '20px 20px 0 0' }}>
+          <h5 className="mb-0 fw-bold d-flex align-items-center">
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #17a2b8, #138496)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '10px',
+              boxShadow: '0 0 15px rgba(23, 162, 184, 0.3)'
+            }}>
+              <span style={{ color: 'white', fontSize: '1.2rem' }}>📝</span>
+            </div>
+            Admin Action Logs
+          </h5>
+        </Card.Header>
+        <Card.Body className="p-4" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          {logs.length === 0 ? (
+            <div className="text-center py-3">
+              <span style={{ fontSize: '3rem', opacity: 0.3 }}>📋</span>
+              <p className="text-muted mt-2">No admin actions logged yet</p>
+            </div>
+          ) : (
+            <div className="log-list">
+              {logs.map((log, index) => (
+                <div key={index} className={`mb-2 p-3 rounded ${log.type === 'error' ? 'bg-danger bg-opacity-10' : 'bg-success bg-opacity-10'}`}>
+                  <div className="d-flex justify-content-between">
+                    <span className={`fw-semibold ${log.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                      {log.type === 'error' ? '❌' : '✅'} {log.message}
+                    </span>
+                    <span className="text-muted small">{log.timestamp}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card.Body>
+        {logs.length > 0 && (
+          <Card.Footer className="bg-white border-0 py-3" style={{ 
+            borderRadius: '0 0 20px 20px',
+            borderTop: '1px solid #f1f1f1'
+          }}>
+            <div className="d-flex justify-content-between align-items-center">
+              <small className="text-muted">
+                {logs.length} log{logs.length !== 1 ? 's' : ''}
+              </small>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => setLogs([])}
+                className="rounded-pill"
+              >
+                Clear Logs
+              </Button>
+            </div>
+          </Card.Footer>
+        )}
+      </Card>
+
+      <style>{`
+        @keyframes buttonPulse {
+          0% { box-shadow: 0 4px 20px rgba(13, 110, 253, 0.4); }
+          50% { box-shadow: 0 4px 25px rgba(13, 110, 253, 0.6); }
+          100% { box-shadow: 0 4px 20px rgba(13, 110, 253, 0.4); }
+        }
+        
+        .admin-dashboard {
+          background: transparent;
+        }
+        
+        .card {
+          transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+          transform: translateY(-5px);
+        }
+        
+        .log-list {
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+          font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+          .card {
+            margin-bottom: 20px;
+          }
+        }
+      `}</style>
+    </div>
   );
 };
 

@@ -1,185 +1,202 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Form, Table, Alert, Badge, Modal } from 'react-bootstrap';
+import { Row, Col, Card, Button, Form, Table, Alert, Badge, Modal, Spinner } from 'react-bootstrap';
 import { getContract, getCurrentAccount } from '../services/web3Service';
-import { getPendingPayments } from '../services/apiService';
+import { getPendingPayments, updateTransaction } from '../services/apiService';
 
-const WhitelistedDashboard = ({ userAddress, whitelistStatus }) => {
+const WhitelistedDashboard = ({ userAddress, userRoles, onRefresh }) => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [minting, setMinting] = useState(false);
+  const [burning, setBurning] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showMintModal, setShowMintModal] = useState(false);
   const [showBurnModal, setShowBurnModal] = useState(false);
   const [burnData, setBurnData] = useState({ address: '', amount: '' });
+  const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    if (whitelistStatus.canMint) {
+    if (userRoles.canMint) {
       fetchPendingPayments();
     }
-  }, [whitelistStatus.canMint]);
+  }, [userRoles.canMint]);
+
+  const addLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, { timestamp, message, type }]);
+    console.log(`[${timestamp}] ${message}`);
+  };
 
   const fetchPendingPayments = async () => {
+    setLoading(true);
     try {
       const data = await getPendingPayments();
       setPendingPayments(data.payments || []);
+      addLog(`Fetched ${data.payments?.length || 0} pending payments`, 'info');
     } catch (error) {
-      console.error('Error fetching pending payments:', error);
-    }
-  };
-
-  // FIXED: Properly handle BigInt decimals
-  const handleMintTokens = async () => {
-    if (!selectedPayment) return;
-    
-    setLoading(true);
-    try {
-      const contract = getContract();
-      const account = await getCurrentAccount();
-      
-      // Get decimals from contract - it's returned as BigInt
-      const decimalsBigInt = await contract.methods.decimals().call();
-      
-      // Convert BigInt to number
-      const decimals = Number(decimalsBigInt);
-      
-      // Convert amount to the correct units
-      const amountInBaseUnits = Math.floor(selectedPayment.amountINR * Math.pow(10, decimals));
-      
-      // Call mintTokens function
-      const tx = await contract.methods.mintTokens(
-        selectedPayment.userAddress,
-        amountInBaseUnits.toString(),
-        selectedPayment.razorpayPaymentId
-      ).send({ from: account });
-      
-      alert(`✅ Tokens minted successfully!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
-      setShowMintModal(false);
-      fetchPendingPayments(); // Refresh list
-      
-    } catch (error) {
-      console.error('Error minting tokens:', error);
-      alert(`❌ Failed to mint tokens: ${error.message}`);
+      addLog(`Error fetching payments: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // FIXED: Properly handle BigInt decimals
+  const handleMintTokens = async () => {
+    if (!selectedPayment) return;
+    
+    setMinting(true);
+    addLog(`Starting mint for ${selectedPayment.userAddress}...`, 'info');
+    
+    try {
+      const contract = getContract();
+      const account = getCurrentAccount();
+      
+      if (!account) {
+        throw new Error('No wallet connected');
+      }
+      
+      // Convert amount properly - FIXED
+      const decimals = await contract.methods.decimals().call();
+      const decimalsNum = parseInt(decimals.toString());
+      
+      // Calculate amount in smallest units (wei equivalent)
+      const amountNum = parseFloat(selectedPayment.amountINR);
+      const amountInUnits = Math.floor(amountNum * 10**decimalsNum);
+      
+      addLog(`Calling mintTokens(${selectedPayment.userAddress}, ${amountInUnits}, ${selectedPayment.razorpayPaymentId})`, 'info');
+      
+      // Call contract - Convert amountInUnits to string to avoid BigInt issues
+      const tx = await contract.methods.mintTokens(
+        selectedPayment.userAddress,
+        amountInUnits.toString(), // Convert to string
+        selectedPayment.razorpayPaymentId
+      ).send({ from: account });
+      
+      addLog(`✅ Mint successful! Tx: ${tx.transactionHash}`, 'success');
+      
+      // Update backend
+      await updateTransaction(
+        selectedPayment.razorpayPaymentId,
+        tx.transactionHash
+      );
+      
+      // Close modal and refresh
+      setShowMintModal(false);
+      fetchPendingPayments();
+      if (onRefresh) onRefresh();
+      
+      alert(`✅ ${selectedPayment.amountINR} INRT minted to ${selectedPayment.userAddress}\nTransaction: ${tx.transactionHash}`);
+      
+    } catch (error) {
+      addLog(`❌ Mint failed: ${error.message}`, 'error');
+      alert(`Mint failed: ${error.message}`);
+    } finally {
+      setMinting(false);
+    }
+  };
+
   const handleBurnTokens = async () => {
     if (!burnData.address || !burnData.amount) {
       alert('Please fill all fields');
       return;
     }
     
-    if (!/^0x[a-fA-F0-9]{40}$/.test(burnData.address)) {
-      alert('Please enter a valid Ethereum address');
-      return;
-    }
+    setBurning(true);
+    addLog(`Starting burn from ${burnData.address}...`, 'info');
     
-    if (isNaN(burnData.amount) || burnData.amount <= 0) {
-      alert('Please enter a valid amount');
-      return;
-    }
-    
-    setLoading(true);
     try {
       const contract = getContract();
-      const account = await getCurrentAccount();
+      const account = getCurrentAccount();
       
-      // Get decimals from contract - it's returned as BigInt
-      const decimalsBigInt = await contract.methods.decimals().call();
+      if (!account) {
+        throw new Error('No wallet connected');
+      }
       
-      // Convert BigInt to number
-      const decimals = Number(decimalsBigInt);
+      // Convert amount properly
+      const decimals = await contract.methods.decimals().call();
+      const decimalsNum = parseInt(decimals.toString());
+      const amountNum = parseFloat(burnData.amount);
+      const amountInUnits = Math.floor(amountNum * 10**decimalsNum);
       
-      // Convert amount to the correct units
-      const amountInBaseUnits = Math.floor(parseFloat(burnData.amount) * Math.pow(10, decimals));
+      addLog(`Calling burnTokens(${burnData.address}, ${amountInUnits})`, 'info');
       
-      // Call burnTokens function
+      // Call contract - Convert to string
       const tx = await contract.methods.burnTokens(
         burnData.address,
-        amountInBaseUnits.toString()
+        amountInUnits.toString() // Convert to string
       ).send({ from: account });
       
-      alert(`✅ Tokens burned successfully!\nTransaction: ${tx.transactionHash.substring(0, 20)}...`);
+      addLog(`✅ Burn successful! Tx: ${tx.transactionHash}`, 'success');
+      
       setShowBurnModal(false);
       setBurnData({ address: '', amount: '' });
+      if (onRefresh) onRefresh();
+      
+      alert(`✅ ${burnData.amount} INRT burned from ${burnData.address}\nTransaction: ${tx.transactionHash}`);
       
     } catch (error) {
-      console.error('Error burning tokens:', error);
-      alert(`❌ Failed to burn tokens: ${error.message}`);
+      addLog(`❌ Burn failed: ${error.message}`, 'error');
+      alert(`Burn failed: ${error.message}`);
     } finally {
-      setLoading(false);
+      setBurning(false);
     }
   };
 
   const formatAddress = (addr) => {
-    if (!addr) return '';
-    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+    return `${addr?.substring(0, 8)}...${addr?.substring(addr.length - 6)}`;
   };
 
   return (
-    <Container fluid className="mt-4">
-      <h2 className="mb-4">⚡ Whitelisted Dashboard</h2>
-      
-      <Row className="mb-4">
-        <Col>
-          <Alert variant="info" className="border-0" style={{ backgroundColor: '#e7f3ff' }}>
-            <div className="d-flex align-items-center">
-              <span style={{ fontSize: '1.5rem', marginRight: '10px' }}>🎯</span>
-              <div>
-                <strong>Whitelist Privileges:</strong>
-                <div className="d-flex gap-3 mt-2">
-                  {whitelistStatus.canMint && <Badge bg="success">Can Mint Tokens</Badge>}
-                  {whitelistStatus.canBurn && <Badge bg="danger">Can Burn Tokens</Badge>}
-                </div>
-              </div>
-            </div>
-          </Alert>
-        </Col>
-      </Row>
-      
-      {/* Minting Section */}
-      {whitelistStatus.canMint && (
+    <div className="whitelisted-dashboard">
+      {/* Role Badges */}
+      <Alert variant="info" className="mb-4">
+        <strong>Whitelist Permissions:</strong>
+        <div className="mt-2">
+          {userRoles.canMint && <Badge bg="success" className="me-2">Can Mint</Badge>}
+          {userRoles.canBurn && <Badge bg="danger" className="me-2">Can Burn</Badge>}
+        </div>
+      </Alert>
+
+      {/* Pending Mints */}
+      {userRoles.canMint && (
         <Row className="mb-4">
           <Col>
-            <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-              <Card.Header className="bg-white border-0 d-flex justify-content-between align-items-center">
-                <h5 className="mb-0">🪙 Pending Token Mints</h5>
-                <Badge bg="primary" pill>{pendingPayments.length} pending</Badge>
+            <Card className="shadow-sm">
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0">🪙 Pending Mints</h5>
+                <Badge bg="primary" pill>
+                  {pendingPayments.length} pending
+                </Badge>
               </Card.Header>
               <Card.Body>
-                {pendingPayments.length === 0 ? (
-                  <Alert variant="success" className="text-center border-0">
-                    <span style={{ fontSize: '3rem' }}>🎉</span>
-                    <h5 className="mt-3">No pending mints</h5>
-                    <p className="text-muted">All payments have been processed</p>
-                  </Alert>
+                {loading ? (
+                  <Spinner animation="border" size="sm" />
+                ) : pendingPayments.length === 0 ? (
+                  <Alert variant="success">No pending mints</Alert>
                 ) : (
                   <div className="table-responsive">
-                    <Table hover className="mb-0">
+                    <Table hover>
                       <thead>
                         <tr>
-                          <th>User Address</th>
-                          <th>Amount (₹)</th>
+                          <th>User</th>
+                          <th>Amount</th>
                           <th>Payment ID</th>
                           <th>Date</th>
                           <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingPayments.map((payment) => (
+                        {pendingPayments.map(payment => (
                           <tr key={payment._id}>
                             <td>
                               <code>{formatAddress(payment.userAddress)}</code>
                             </td>
                             <td className="fw-bold">₹{payment.amountINR}</td>
                             <td>
-                              <small className="text-muted">
-                                {payment.razorpayPaymentId?.substring(0, 10)}...
-                              </small>
+                              <code className="small">
+                                {payment.razorpayPaymentId?.substring(0, 12)}...
+                              </code>
                             </td>
                             <td>
-                              <small>{new Date(payment.paymentTimestamp).toLocaleDateString()}</small>
+                              {payment.createdAt && new Date(payment.createdAt).toLocaleDateString()}
                             </td>
                             <td>
                               <Button
@@ -204,48 +221,44 @@ const WhitelistedDashboard = ({ userAddress, whitelistStatus }) => {
           </Col>
         </Row>
       )}
-      
-      {/* Burning Section */}
-      {whitelistStatus.canBurn && (
-        <Row>
+
+      {/* Burn Tokens */}
+      {userRoles.canBurn && (
+        <Row className="mb-4">
           <Col>
-            <Card className="shadow-sm border-0" style={{ borderRadius: '15px' }}>
-              <Card.Header className="bg-white border-0">
-                <h5 className="mb-0">🔥 Burn Tokens (Whitelisted)</h5>
+            <Card className="shadow-sm">
+              <Card.Header>
+                <h5 className="mb-0">🔥 Burn Tokens</h5>
               </Card.Header>
               <Card.Body>
-                <Alert variant="warning" className="border-0" style={{ backgroundColor: '#fff3cd' }}>
-                  <small>
-                    <strong>Warning:</strong> As a whitelisted burner, you can burn tokens from any address.
-                    This action is irreversible. Use this privilege responsibly.
-                  </small>
+                <Alert variant="warning" className="small">
+                  <strong>Warning:</strong> You can burn tokens from any address
                 </Alert>
                 
                 <Form>
                   <Row>
                     <Col md={6}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Recipient Address</Form.Label>
+                        <Form.Label>From Address</Form.Label>
                         <Form.Control
                           type="text"
                           placeholder="0x..."
                           value={burnData.address}
                           onChange={(e) => setBurnData({...burnData, address: e.target.value})}
-                          style={{ fontFamily: 'monospace' }}
                         />
                       </Form.Group>
                     </Col>
                     <Col md={4}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Amount to Burn</Form.Label>
+                        <Form.Label>Amount (INRT)</Form.Label>
                         <div className="input-group">
                           <Form.Control
                             type="number"
                             placeholder="Amount"
                             value={burnData.amount}
                             onChange={(e) => setBurnData({...burnData, amount: e.target.value})}
-                            min="1"
-                            step="1"
+                            min="0.01"
+                            step="0.01"
                           />
                           <span className="input-group-text">INRT</span>
                         </div>
@@ -268,116 +281,103 @@ const WhitelistedDashboard = ({ userAddress, whitelistStatus }) => {
           </Col>
         </Row>
       )}
-      
-      {/* Mint Confirmation Modal */}
-      <Modal show={showMintModal} onHide={() => setShowMintModal(false)} centered>
-        <Modal.Header closeButton className="border-0">
-          <Modal.Title>Confirm Token Minting</Modal.Title>
+
+      {/* Debug Logs */}
+      <Card className="shadow-sm">
+        <Card.Header>
+          <h5 className="mb-0">📝 Contract Interaction Logs</h5>
+        </Card.Header>
+        <Card.Body style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          {logs.length === 0 ? (
+            <p className="text-muted">No logs yet</p>
+          ) : (
+            logs.map((log, index) => (
+              <div key={index} className={`small mb-1 ${log.type === 'error' ? 'text-danger' : log.type === 'success' ? 'text-success' : ''}`}>
+                [{log.timestamp}] {log.message}
+              </div>
+            ))
+          )}
+        </Card.Body>
+        <Card.Footer className="text-end">
+          <Button size="sm" variant="outline-secondary" onClick={() => setLogs([])}>
+            Clear Logs
+          </Button>
+        </Card.Footer>
+      </Card>
+
+      {/* Mint Modal */}
+      <Modal show={showMintModal} onHide={() => setShowMintModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Mint</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedPayment && (
             <>
-              <div className="text-center mb-4">
-                <div style={{
-                  width: '60px',
-                  height: '60px',
-                  backgroundColor: '#007bff',
-                  borderRadius: '50%',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: '1.5rem'
-                }}>
-                  🪙
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Recipient:</span>
-                  <code>{formatAddress(selectedPayment.userAddress)}</code>
-                </div>
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Amount:</span>
-                  <span className="fw-bold">₹{selectedPayment.amountINR}</span>
-                </div>
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Tokens:</span>
-                  <span className="fw-bold">{selectedPayment.amountINR} INRT</span>
-                </div>
-                <div className="d-flex justify-content-between">
-                  <span className="text-muted">Payment ID:</span>
-                  <small className="fw-bold">{selectedPayment.razorpayPaymentId?.substring(0, 12)}...</small>
-                </div>
-              </div>
-              
-              <Alert variant="info" className="border-0">
-                <small>
-                  This will mint {selectedPayment.amountINR} INRT tokens to the user's address.
-                  Gas fee will be charged for this transaction.
-                </small>
+              <p><strong>To Address:</strong> {selectedPayment.userAddress}</p>
+              <p><strong>Amount:</strong> {selectedPayment.amountINR} INRT</p>
+              <p><strong>Payment ID:</strong> {selectedPayment.razorpayPaymentId}</p>
+              <p><strong>Date:</strong> {selectedPayment.createdAt && new Date(selectedPayment.createdAt).toLocaleString()}</p>
+              <Alert variant="info">
+                This will mint {selectedPayment.amountINR} INRT tokens to the user's address.
+                Requires blockchain transaction.
               </Alert>
             </>
           )}
         </Modal.Body>
-        <Modal.Footer className="border-0">
+        <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowMintModal(false)}>
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            onClick={handleMintTokens}
-            disabled={loading}
+          <Button 
+            variant="primary" 
+            onClick={handleMintTokens} 
+            disabled={minting}
           >
-            {loading ? 'Minting...' : 'Confirm Mint'}
+            {minting ? (
+              <>
+                <Spinner as="span" size="sm" className="me-2" />
+                Minting...
+              </>
+            ) : (
+              'Confirm Mint'
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
-      
-      {/* Burn Confirmation Modal */}
-      <Modal show={showBurnModal} onHide={() => setShowBurnModal(false)} centered>
-        <Modal.Header closeButton className="border-0">
-          <Modal.Title>Confirm Token Burning</Modal.Title>
+
+      {/* Burn Modal */}
+      <Modal show={showBurnModal} onHide={() => setShowBurnModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Burn</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div className="text-center mb-4">
-            <div style={{
-              width: '60px',
-              height: '60px',
-              backgroundColor: '#dc3545',
-              borderRadius: '50%',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '1.5rem'
-            }}>
-              🔥
-            </div>
-          </div>
-          
-          <Alert variant="danger" className="border-0" style={{ backgroundColor: '#f8d7da' }}>
-            <small>
-              <strong>⚠️ Warning:</strong> This will permanently burn {burnData.amount} INRT tokens from {formatAddress(burnData.address)}.
-              This action cannot be undone. Are you sure you want to proceed?
-            </small>
+          <Alert variant="danger">
+            <strong>⚠️ Warning:</strong> This will permanently burn {burnData.amount} INRT tokens
+            from address {formatAddress(burnData.address)}.
           </Alert>
+          <p>Are you sure you want to proceed?</p>
         </Modal.Body>
-        <Modal.Footer className="border-0">
+        <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowBurnModal(false)}>
             Cancel
           </Button>
-          <Button
-            variant="danger"
-            onClick={handleBurnTokens}
-            disabled={loading}
+          <Button 
+            variant="danger" 
+            onClick={handleBurnTokens} 
+            disabled={burning}
           >
-            {loading ? 'Burning...' : 'Confirm Burn'}
+            {burning ? (
+              <>
+                <Spinner as="span" size="sm" className="me-2" />
+                Burning...
+              </>
+            ) : (
+              'Confirm Burn'
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
-    </Container>
+    </div>
   );
 };
 

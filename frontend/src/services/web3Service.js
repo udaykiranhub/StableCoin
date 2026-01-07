@@ -1,288 +1,347 @@
-// import Web3 from 'web3';
-// import { CONTRACT_ADDRESS } from '../constants/contractAddress';
-// import CONTRACT_ABI from "../constants/contractABI.json";
-
-// let web3 = null;
-// let contract = null;
-
-// export const initWeb3 = async () => {
-//   if (window.ethereum) {
-//     try {
-//       // Request account access
-//       await window.ethereum.request({ method: 'eth_requestAccounts' });
-//       web3 = new Web3(window.ethereum);
-      
-//       // Initialize contract
-//       contract = new web3.eth.Contract(CONTRACT_ABI.abi, CONTRACT_ADDRESS);
-      
-//       console.log("Web3 initialized successfully");
-//       return { web3, contract };
-//     } catch (error) {
-//       console.error('User denied account access', error);
-//       throw new Error('Please connect to MetaMask');
-//     }
-//   } else if (window.web3) {
-//     web3 = new Web3(window.web3.currentProvider);
-//     contract = new web3.eth.Contract(CONTRACT_ABI.abi, CONTRACT_ADDRESS);
-//     return { web3, contract };
-//   } else {
-//     throw new Error('Please install MetaMask');
-//   }
-// };
-
-// export const getWeb3 = () => {
-//   if (!web3) throw new Error('Web3 not initialized');
-//   return web3;
-// };
-
-// export const getContract = () => {
-//   if (!contract) throw new Error('Contract not initialized');
-//   return contract;
-// };
-
-// export const getAccounts = async () => {
-//   if (!web3) throw new Error('Web3 not initialized');
-//   return await web3.eth.getAccounts();
-// };
-
-// export const getCurrentAccount = async () => {
-//   const accounts = await getAccounts();
-//   return accounts[0] || null;
-// };
-
-// export const getBalance = async (address) => {
-//   const contract = getContract();
-//   const balance = await contract.methods.balanceOf(address).call();
-//   const decimals = await contract.methods.decimals().call();
-//   return web3.utils.fromWei(balance, 'ether') * (10 ** (18 - decimals));
-// };
-
-// export const getTokenInfo = async () => {
-//   const contract = getContract();
-//   const [name, symbol, totalSupply, decimals] = await Promise.all([
-//     contract.methods.name().call(),
-//     contract.methods.symbol().call(),
-//     contract.methods.totalSupply().call(),
-//     contract.methods.decimals().call()
-//   ]);
-  
-//   return { name, symbol, totalSupply, decimals };
-// };
-
-// export const checkWhitelistStatus = async (address) => {
-//   const contract = getContract();
-//   try {
-//     const status = await contract.methods.whitelist(address).call();
-//     return {
-//       canMint: status.canMint,
-//       canBurn: status.canBurn
-//     };
-//   } catch (error) {
-//     console.error('Error checking whitelist:', error);
-//     return { canMint: false, canBurn: false };
-//   }
-// };
-
-// export const checkAdminStatus = async (address) => {
-//   const contract = getContract();
-//   try {
-//     return await contract.methods.admins(address).call();
-//   } catch (error) {
-//     console.error('Error checking admin status:', error);
-//     return false;
-//   }
-// };
-
-// export const getNetworkInfo = async () => {
-//   if (!web3) throw new Error('Web3 not initialized');
-//   const networkId = await web3.eth.net.getId();
-//   const networks = {
-//     1: 'Ethereum Mainnet',
-//     3: 'Ropsten',
-//     4: 'Rinkeby',
-//     5: 'Goerli',
-//     42: 'Kovan',
-//     137: 'Polygon',
-//     80001: 'Mumbai',
-//     1337: 'Localhost',
-//     31337: 'Hardhat'
-//   };
-//   return {
-//     id: networkId,
-//     name: networks[networkId] || `Network ${networkId}`
-//   };
-// };
-
-
 import Web3 from 'web3';
 import { CONTRACT_ADDRESS } from '../constants/contractAddress';
-import CONTRACT_ABI from "../constants/contractABI.json";
+import CONTRACT_ABI from '../constants/contractABI.json';
 
+// Global instances
 let web3 = null;
 let contract = null;
+let currentAccount = null;
 
+// Safe BigInt conversion
+const safeParseInt = (value) => {
+  if (typeof value === 'bigint') {
+    return parseInt(value.toString());
+  }
+  return parseInt(value);
+};
+
+const safeParseFloat = (value, decimals = 2) => {
+  if (typeof value === 'bigint') {
+    const divisor = 10 ** decimals;
+    return parseInt(value.toString()) / divisor;
+  }
+  return value / (10 ** decimals);
+};
+
+// Initialize Web3
 export const initWeb3 = async () => {
-  if (window.ethereum) {
-    try {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      web3 = new Web3(window.ethereum);
-      
-      contract = new web3.eth.Contract(CONTRACT_ABI.abi, CONTRACT_ADDRESS);
-      
-      console.log("Web3 initialized successfully");
-      return { web3, contract };
-    } catch (error) {
-      console.error('User denied account access', error);
-      throw new Error('Please connect to MetaMask');
-    }
-  } else if (window.web3) {
-    web3 = new Web3(window.web3.currentProvider);
-    contract = new web3.eth.Contract(CONTRACT_ABI.abi, CONTRACT_ADDRESS);
-    return { web3, contract };
-  } else {
+  console.log('🔄 Initializing Web3...');
+  
+  if (!window.ethereum) {
     throw new Error('Please install MetaMask');
+  }
+
+  try {
+    // Request account access
+    const accounts = await window.ethereum.request({ 
+      method: 'eth_requestAccounts' 
+    });
+    
+    if (!accounts.length) {
+      throw new Error('No accounts found');
+    }
+
+    // Create Web3 instance
+    web3 = new Web3(window.ethereum);
+    
+    // Fix ABI format issue - ensure it's an array
+    let abi = CONTRACT_ABI;
+    if (CONTRACT_ABI.abi) {
+      abi = CONTRACT_ABI.abi; // Extract abi from {abi: [...]}
+    }
+    
+    // Create contract instance
+    contract = new web3.eth.Contract(abi, CONTRACT_ADDRESS);
+    currentAccount = accounts[0];
+    
+    // Save to localStorage
+    localStorage.setItem('connectedAccount', currentAccount);
+    
+    console.log('✅ Web3 Initialized:', {
+      account: currentAccount,
+      contractAddress: CONTRACT_ADDRESS,
+      network: safeParseInt(await web3.eth.net.getId())
+    });
+    
+    return { web3, contract, account: currentAccount };
+    
+  } catch (error) {
+    console.error('❌ Web3 initialization failed:', error);
+    throw error;
   }
 };
 
-export const getWeb3 = () => {
-  if (!web3) throw new Error('Web3 not initialized');
-  return web3;
+// Silent initialization
+export const initWeb3Silently = async () => {
+  console.log('🔇 Trying silent Web3 initialization...');
+  
+  if (window.ethereum) {
+    try {
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_accounts' 
+      });
+      
+      if (accounts.length > 0) {
+        web3 = new Web3(window.ethereum);
+        
+        // Fix ABI format issue
+        let abi = CONTRACT_ABI;
+        if (CONTRACT_ABI.abi) {
+          abi = CONTRACT_ABI.abi;
+        }
+        
+        contract = new web3.eth.Contract(abi, CONTRACT_ADDRESS);
+        currentAccount = accounts[0];
+        
+        console.log('✅ Silent initialization successful:', currentAccount);
+        return { web3, contract, account: currentAccount };
+      }
+    } catch (error) {
+      console.error('Silent initialization error:', error);
+    }
+  }
+  
+  return null;
 };
 
+// Get contract instance
 export const getContract = () => {
   if (!contract) throw new Error('Contract not initialized');
   return contract;
 };
 
-export const getAccounts = async () => {
+// Get Web3 instance
+export const getWeb3 = () => {
   if (!web3) throw new Error('Web3 not initialized');
-  return await web3.eth.getAccounts();
+  return web3;
 };
 
-export const getCurrentAccount = async () => {
-  const accounts = await getAccounts();
-  return accounts[0] || null;
+// Get current account
+export const getCurrentAccount = () => currentAccount;
+
+// Check connection
+export const isConnected = () => !!web3 && !!contract && !!currentAccount;
+
+// Clear connection
+export const clearSavedConnection = () => {
+  web3 = null;
+  contract = null;
+  currentAccount = null;
+  localStorage.removeItem('connectedAccount');
+  console.log('🔌 Connection cleared');
 };
 
-// Helper function to convert to BigInt
-export const toBigInt = (value) => {
-  if (typeof value === 'bigint') return value;
-  if (typeof value === 'string' || typeof value === 'number') {
-    return BigInt(Math.floor(Number(value)));
-  }
-  return BigInt(value);
+// Get saved account
+export const getSavedConnection = () => {
+  return localStorage.getItem('connectedAccount');
 };
 
-// Helper function to convert to Wei (considering decimals)
-export const toTokenUnits = async (amount) => {
-  const contract = getContract();
-  const decimals = await contract.methods.decimals().call();
-  return toBigInt(amount) * (10n ** BigInt(decimals));
-};
-
-// Helper function to convert from Wei
-export const fromTokenUnits = async (amount) => {
-  const contract = getContract();
-  const decimals = await contract.methods.decimals().call();
-  return Number(amount) / Number(10n ** BigInt(decimals));
-};
-
-export const getBalance = async (address) => {
-  const contract = getContract();
-  const balance = await contract.methods.balanceOf(address).call();
-  const decimals = await contract.methods.decimals().call();
-  const divisor = 10n ** BigInt(decimals);
-  return Number(BigInt(balance) / divisor);
-};
-
-export const getTokenInfo = async () => {
-  const contract = getContract();
-  const [name, symbol, totalSupply, decimals] = await Promise.all([
-    contract.methods.name().call(),
-    contract.methods.symbol().call(),
-    contract.methods.totalSupply().call(),
-    contract.methods.decimals().call()
-  ]);
+// Get network info
+export const getNetworkInfo = async () => {
+  if (!web3) return null;
   
-  return { name, symbol, totalSupply, decimals };
-};
-
-export const checkWhitelistStatus = async (address) => {
-  const contract = getContract();
   try {
-    const status = await contract.methods.whitelist(address).call();
+    const chainId = safeParseInt(await web3.eth.getChainId());
+    
+    const networks = {
+      1: { name: 'Ethereum Mainnet', testnet: false },
+      5: { name: 'Goerli Testnet', testnet: true },
+      137: { name: 'Polygon Mainnet', testnet: false },
+      80001: { name: 'Polygon Mumbai', testnet: true },
+      31337: { name: 'Anvil Local', testnet: true },
+      1337: { name: 'Ganache Local', testnet: true }
+    };
+    
+    const network = networks[chainId] || { name: `Unknown (${chainId})`, testnet: true };
+    
     return {
-      canMint: status.canMint,
-      canBurn: status.canBurn
+      chainId,
+      name: network.name,
+      isTestnet: network.testnet,
+      isCorrectNetwork: chainId === 31337 || chainId === 80001 // Accept Hardhat Local
     };
   } catch (error) {
-    console.error('Error checking whitelist:', error);
-    return { canMint: false, canBurn: false };
+    console.error('Get network error:', error);
+    return null;
   }
 };
 
-export const checkAdminStatus = async (address) => {
-  const contract = getContract();
+// Add this missing function for Dashboard.jsx
+export const switchToCorrectNetwork = async () => {
+  if (!window.ethereum) return false;
+  
   try {
-    return await contract.methods.admins(address).call();
+    const networkInfo = await getNetworkInfo();
+    
+    // If already on acceptable network, return true
+    if (networkInfo && networkInfo.isCorrectNetwork) {
+      return true;
+    }
+    
+    // Try to switch to Polygon Mumbai (80001)
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x13881' }], // Polygon Mumbai
+      });
+      return true;
+    } catch (switchError) {
+      // If network not added, add it
+      if (switchError.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x13881',
+            chainName: 'Polygon Mumbai',
+            nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+            rpcUrls: ['https://rpc-mumbai.maticvigil.com'],
+            blockExplorerUrls: ['https://mumbai.polygonscan.com']
+          }]
+        });
+        return true;
+      }
+      throw switchError;
+    }
   } catch (error) {
-    console.error('Error checking admin status:', error);
+    console.error('Switch network error:', error);
     return false;
   }
 };
 
-export const getNetworkInfo = async () => {
-  if (!web3) throw new Error('Web3 not initialized');
-  const networkId = await web3.eth.net.getId();
-  const networks = {
-    1: 'Ethereum Mainnet',
-    3: 'Ropsten',
-    4: 'Rinkeby',
-    5: 'Goerli',
-    42: 'Kovan',
-    137: 'Polygon',
-    80001: 'Mumbai',
-    1337: 'Localhost',
-    31337: 'Hardhat'
-  };
-  return {
-    id: networkId,
-    name: networks[networkId] || `Network ${networkId}`
-  };
+// Convert amount to token units
+export const convertToTokenUnits = async (amount) => {
+  try {
+    const contract = getContract();
+    const decimals = safeParseInt(await contract.methods.decimals().call());
+    const amountInUnits = Math.floor(Number(amount) * Math.pow(10, decimals));
+    console.log(`Converted ${amount} to ${amountInUnits} token units`);
+    return amountInUnits.toString();
+  } catch (error) {
+    console.error('Conversion error:', error);
+    throw error;
+  }
 };
 
-// Helper for minting
-export const mintTokens = async (to, amount, paymentId) => {
-  const contract = getContract();
-  const account = await getCurrentAccount();
-  const amountInUnits = await toTokenUnits(amount);
+// Parse contract errors
+export const parseContractError = (error) => {
+  console.error('Contract error:', error);
   
-  return await contract.methods.mintTokens(
-    to,
-    amountInUnits.toString(), // Convert BigInt to string
-    paymentId
-  ).send({ from: account });
+  if (error.code === 4001) {
+    return 'Transaction rejected by user';
+  }
+  
+  if (error.message) {
+    const revertMatch = error.message.match(/execution reverted: ([^"]+)/);
+    if (revertMatch) {
+      return revertMatch[1];
+    }
+    
+    if (error.message.includes('insufficient funds')) {
+      return 'Insufficient ETH for gas fees';
+    }
+    
+    if (error.message.includes('not whitelisted')) {
+      return 'You are not whitelisted for this action';
+    }
+  }
+  
+  return error.message || 'Transaction failed';
 };
 
-// Helper for burning
-export const burnTokens = async (from, amount) => {
-  const contract = getContract();
-  const account = await getCurrentAccount();
-  const amountInUnits = await toTokenUnits(amount);
-  
-  return await contract.methods.burnTokens(
-    from,
-    amountInUnits.toString()
-  ).send({ from: account });
+// Check user roles
+export const getUserRoles = async (address) => {
+  try {
+    console.log(`🔍 Checking roles for ${address}`);
+    
+    const contract = getContract();
+    const [whitelistStatus, adminStatus] = await Promise.all([
+      contract.methods.whitelist(address).call(),
+      contract.methods.admins(address).call()
+    ]);
+    
+    const roles = {
+      isAdmin: Boolean(adminStatus),
+      canMint: Boolean(whitelistStatus.canMint),
+      canBurn: Boolean(whitelistStatus.canBurn),
+      isWhitelisted: Boolean(whitelistStatus.canMint || whitelistStatus.canBurn)
+    };
+    
+    console.log('User roles:', roles);
+    return roles;
+  } catch (error) {
+    console.error('Role check error:', error);
+    return {
+      isAdmin: false,
+      canMint: false,
+      canBurn: false,
+      isWhitelisted: false
+    };
+  }
 };
 
-// Helper for burning own tokens
-export const burnMyTokens = async (amount) => {
-  const contract = getContract();
-  const account = await getCurrentAccount();
-  const amountInUnits = await toTokenUnits(amount);
+// Get token balance
+export const getTokenBalance = async (address) => {
+  try {
+    const contract = getContract();
+    const balance = await contract.methods.balanceOf(address).call();
+    const decimals = safeParseInt(await contract.methods.decimals().call());
+    const formatted = safeParseFloat(balance, decimals).toFixed(2);
+    console.log(`Balance for ${address}: ${formatted} INRT`);
+    return formatted;
+  } catch (error) {
+    console.error('Balance fetch error:', error);
+    return '0.00';
+  }
+};
+
+// Test contract connection
+export const testContractConnection = async () => {
+  try {
+    const contract = getContract();
+    const [name, symbol, decimals, totalSupply] = await Promise.all([
+      contract.methods.name().call(),
+      contract.methods.symbol().call(),
+      contract.methods.decimals().call(),
+      contract.methods.totalSupply().call()
+    ]);
+    
+    const networkInfo = await getNetworkInfo();
+    
+    const supplyFormatted = safeParseFloat(totalSupply, safeParseInt(decimals)).toFixed(2);
+    
+    return {
+      success: true,
+      contract: { 
+        name, 
+        symbol, 
+        decimals: safeParseInt(decimals),
+        totalSupply: supplyFormatted
+      },
+      network: networkInfo,
+      account: getCurrentAccount()
+    };
+  } catch (error) {
+    console.error('Test contract error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+
+
+// Also add this function for getting account from MetaMask directly:
+export const getAccountFromMetaMask = async () => {
+  if (!window.ethereum) return null;
   
-  return await contract.methods.burnMyTokens(
-    amountInUnits.toString()
-  ).send({ from: account });
+  try {
+    const accounts = await window.ethereum.request({ 
+      method: 'eth_accounts' 
+    });
+    return accounts[0] || null;
+  } catch (error) {
+    console.error('Error getting account from MetaMask:', error);
+    return null;
+  }
 };

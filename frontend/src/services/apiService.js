@@ -1,39 +1,25 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE = 'http://localhost:5000/api';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE,
   headers: {
-    'Content-Type': 'application/json',
-  },
+    'Content-Type': 'application/json'
+  }
 });
 
-// Error handler
-const handleError = (error) => {
-  if (error.response) {
-    console.error('API Error:', error.response.data);
-    throw new Error(error.response.data.error || 'API Error');
-  } else if (error.request) {
-    console.error('No response received:', error.request);
-    throw new Error('No response from server');
-  } else {
-    console.error('Request error:', error.message);
-    throw new Error('Request failed');
-  }
-};
-
-export const createPaymentOrder = async (amount, userAddress, userName = '', userEmail = '') => {
+// Payment functions
+export const createPaymentOrder = async (amount, userAddress) => {
   try {
     const response = await api.post('/create-order', {
       amount,
-      userAddress,
-      userName,
-      userEmail
+      userAddress
     });
     return response.data;
   } catch (error) {
-    handleError(error);
+    console.error('Payment order error:', error);
+    throw error;
   }
 };
 
@@ -42,10 +28,12 @@ export const verifyPayment = async (paymentData) => {
     const response = await api.post('/verify-payment', paymentData);
     return response.data;
   } catch (error) {
-    handleError(error);
+    console.error('Payment verification error:', error);
+    throw error;
   }
 };
 
+// ADD THIS FUNCTION for updating transaction
 export const updateTransaction = async (razorpayPaymentId, transactionHash) => {
   try {
     const response = await api.post('/update-transaction', {
@@ -54,7 +42,8 @@ export const updateTransaction = async (razorpayPaymentId, transactionHash) => {
     });
     return response.data;
   } catch (error) {
-    handleError(error);
+    console.error('Update transaction error:', error);
+    throw error;
   }
 };
 
@@ -63,16 +52,8 @@ export const getUserPayments = async (address) => {
     const response = await api.get(`/payments/user/${address}`);
     return response.data;
   } catch (error) {
-    handleError(error);
-  }
-};
-
-export const getAllPayments = async () => {
-  try {
-    const response = await api.get('/payments');
-    return response.data;
-  } catch (error) {
-    handleError(error);
+    console.error('Get payments error:', error);
+    return { payments: [] };
   }
 };
 
@@ -81,15 +62,28 @@ export const getPendingPayments = async () => {
     const response = await api.get('/payments/pending');
     return response.data;
   } catch (error) {
-    handleError(error);
+    console.error('Get pending payments error:', error);
+    return { payments: [] };
   }
 };
 
-export const checkHealth = async () => {
+export const getAllPayments = async () => {
+  try {
+    const response = await api.get('/payments');
+    return response.data;
+  } catch (error) {
+    console.error('Get all payments error:', error);
+    return { payments: [] };
+  }
+};
+
+// Health check
+export const checkBackendHealth = async () => {
   try {
     const response = await api.get('/health');
     return response.data;
   } catch (error) {
-    handleError(error);
+    console.error('Backend health check failed:', error);
+    return { status: 'unhealthy' };
   }
 };
